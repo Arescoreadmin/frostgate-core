@@ -1,19 +1,16 @@
 """Smoke tests for the FastAPI scaffold."""
 
-from fastapi.testclient import TestClient
+import pytest
 
-from app.main import app
-
-client = TestClient(app)
-
-
-def test_root_returns_message() -> None:
-    response = client.get("/")
-    assert response.status_code == 200
-    assert response.json() == {"message": "Frostgate backend is online"}
+from app.api import routes
+from app.main import root
 
 
-def test_health_endpoint_reports_ok() -> None:
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+@pytest.mark.anyio("asyncio")
+async def test_root_returns_message() -> None:
+    assert await root() == {"message": "Frostgate backend is online"}
+
+
+@pytest.mark.anyio("asyncio")
+async def test_health_endpoint_reports_ok() -> None:
+    assert await routes.health() == {"status": "ok"}

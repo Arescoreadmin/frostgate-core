@@ -2,7 +2,7 @@
 
 This repository now ships with a minimal FastAPI backend so the team can start iterating toward the MVP immediately. The scaffold includes:
 
-- A ready-to-run FastAPI application with `/` and `/health` endpoints.
+- A ready-to-run FastAPI application with `/`, `/health`, and `/missions` endpoints.
 - A `pyproject.toml` with runtime and development dependencies pinned for Python 3.11.
 - Basic pytest smoke tests that document the expected responses.
 - Documentation (`backend/README.md`) covering setup, running the dev server, and executing tests.

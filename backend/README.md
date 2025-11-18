@@ -4,7 +4,8 @@ This directory contains a lightweight FastAPI scaffold so the team can iterate t
 
 1. Provide a predictable application entry point (`app/main.py`).
 2. Expose a simple health endpoint so infrastructure can verify deployments.
-3. Document how to install dependencies, run the dev server, and execute tests.
+3. Provide a `/missions` endpoint that serves static content so product work can begin ahead of persistence wiring.
+4. Document how to install dependencies, run the dev server, and execute tests.
 
 ## Getting started
 
