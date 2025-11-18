@@ -14,5 +14,8 @@ class Settings(BaseModel):
     ai_adversarial_threshold: float = float(os.getenv("AI_ADV_SCORE_THRESHOLD", "0.8"))
     clock_drift_warn_ms: int = int(os.getenv("CLOCK_DRIFT_WARN_MS", "1000"))
 
+    # Global API key (optional). If empty, auth is disabled.
+    api_key: str | None = os.getenv("FG_API_KEY") or None
+
 
 settings = Settings()

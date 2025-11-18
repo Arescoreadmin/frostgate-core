@@ -2,12 +2,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List
 
-from fastapi import FastAPI, Request, Header, Query
+from fastapi import FastAPI, Request, Header, Query, Depends
 from loguru import logger
 
 from .schemas import TelemetryInput, DefendResponse, ExplainBlock, MitigationAction
 from .config import settings
 from .logging_config import configure_logging
+from .auth import require_api_key
 from engine import evaluate_rules, record_decision, list_decisions
 from tools.telemetry.loader import load_golden_samples
 
@@ -20,11 +21,11 @@ CHAOS_STATE_FILE = STATE_DIR / "chaos_status.json"
 
 app = FastAPI(
     title="FrostGate Core API",
-    version="0.7.0",
+    version="0.8.0",
     description=(
         "FrostGate Core MVP: rules engine, golden-sample tester, "
         "structured logging, decision history, enforcement modes, "
-        "Merkle anchor status, and chaos job status."
+        "Merkle anchor status, chaos job status, and API key auth."
     ),
 )
 
@@ -37,6 +38,7 @@ async def startup_event():
             "env": settings.env,
             "service": "frostgate-core",
             "enforcement_mode": settings.enforcement_mode,
+            "auth_enabled": bool(settings.api_key),
         },
     )
 
@@ -44,10 +46,16 @@ async def startup_event():
 @app.get("/health")
 async def health() -> Dict[str, Any]:
     logger.debug("health_check")
-    return {"status": "ok", "env": settings.env, "enforcement_mode": settings.enforcement_mode}
+    return {
+        "status": "ok",
+        "env": settings.env,
+        "enforcement_mode": settings.enforcement_mode,
+        "auth_enabled": bool(settings.api_key),
+    }
 
 
-@app.get("/status")
+@app.get("/status", dependencies=[Depends(require_api_key)])
+@app.get("/v1/status", dependencies=[Depends(require_api_key)])
 async def status() -> Dict[str, Any]:
     anchor_status = None
     chaos_status = None
@@ -65,7 +73,7 @@ async def status() -> Dict[str, Any]:
 
     return {
         "service": "frostgate-core",
-        "version": "0.7.0",
+        "version": "0.8.0",
         "env": settings.env,
         "enforcement_mode": settings.enforcement_mode,
         "components": {
@@ -101,7 +109,16 @@ def _apply_enforcement_mode(
     return transformed
 
 
-@app.post("/defend", response_model=DefendResponse)
+@app.post(
+    "/defend",
+    response_model=DefendResponse,
+    dependencies=[Depends(require_api_key)],
+)
+@app.post(
+    "/v1/defend",
+    response_model=DefendResponse,
+    dependencies=[Depends(require_api_key)],
+)
 async def defend(
     telemetry: TelemetryInput,
     request: Request,
@@ -182,7 +199,14 @@ async def defend(
     return resp
 
 
-@app.get("/defend/test")
+@app.get(
+    "/defend/test",
+    dependencies=[Depends(require_api_key)],
+)
+@app.get(
+    "/v1/defend/test",
+    dependencies=[Depends(require_api_key)],
+)
 async def defend_test(
     limit: int = Query(10, ge=1, le=100),
     label: str | None = Query(
@@ -260,7 +284,14 @@ async def defend_test(
     }
 
 
-@app.get("/decisions")
+@app.get(
+    "/decisions",
+    dependencies=[Depends(require_api_key)],
+)
+@app.get(
+    "/v1/decisions",
+    dependencies=[Depends(require_api_key)],
+)
 async def decisions(
     tenant_id: str | None = Query(
         None,
@@ -292,7 +323,14 @@ async def decisions(
     }
 
 
-@app.get("/anchor/status")
+@app.get(
+    "/anchor/status",
+    dependencies=[Depends(require_api_key)],
+)
+@app.get(
+    "/v1/anchor/status",
+    dependencies=[Depends(require_api_key)],
+)
 async def anchor_status() -> Dict[str, Any]:
     """
     Expose last Merkle anchor job status.
@@ -316,7 +354,14 @@ async def anchor_status() -> Dict[str, Any]:
         return {"status": "error", "detail": "failed_to_read_anchor_state"}
 
 
-@app.get("/chaos/status")
+@app.get(
+    "/chaos/status",
+    dependencies=[Depends(require_api_key)],
+)
+@app.get(
+    "/v1/chaos/status",
+    dependencies=[Depends(require_api_key)],
+)
 async def chaos_status() -> Dict[str, Any]:
     """
     Expose last chaos-monkey job status.
