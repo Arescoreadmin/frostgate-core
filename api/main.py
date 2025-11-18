@@ -16,13 +16,15 @@ configure_logging()
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "state"
 ANCHOR_STATE_FILE = STATE_DIR / "merkle_anchor_status.json"
+CHAOS_STATE_FILE = STATE_DIR / "chaos_status.json"
 
 app = FastAPI(
     title="FrostGate Core API",
-    version="0.6.0",
+    version="0.7.0",
     description=(
         "FrostGate Core MVP: rules engine, golden-sample tester, "
-        "structured logging, decision history, enforcement modes, and Merkle anchor status."
+        "structured logging, decision history, enforcement modes, "
+        "Merkle anchor status, and chaos job status."
     ),
 )
 
@@ -48,25 +50,32 @@ async def health() -> Dict[str, Any]:
 @app.get("/status")
 async def status() -> Dict[str, Any]:
     anchor_status = None
-    if ANCHOR_STATE_FILE.exists():
-        try:
-            import json
+    chaos_status = None
 
+    try:
+        import json
+
+        if ANCHOR_STATE_FILE.exists():
             anchor_status = json.loads(ANCHOR_STATE_FILE.read_text())
-        except Exception:
-            anchor_status = {"status": "unknown", "error": "failed_to_parse_state"}
+        if CHAOS_STATE_FILE.exists():
+            chaos_status = json.loads(CHAOS_STATE_FILE.read_text())
+    except Exception:
+        # Keep it defensive; don't break /status because of bad state
+        pass
 
     return {
         "service": "frostgate-core",
-        "version": "0.6.0",
+        "version": "0.7.0",
         "env": settings.env,
         "enforcement_mode": settings.enforcement_mode,
         "components": {
             "ensemble": "rules-only-mvp",
             "merkle_anchor": "stub",
             "supervisor": "pending",
+            "chaos": "stub",
         },
         "anchor": anchor_status,
+        "chaos": chaos_status,
     }
 
 
@@ -305,6 +314,30 @@ async def anchor_status() -> Dict[str, Any]:
             extra={"state_file": str(ANCHOR_STATE_FILE), "error": str(exc)},
         )
         return {"status": "error", "detail": "failed_to_read_anchor_state"}
+
+
+@app.get("/chaos/status")
+async def chaos_status() -> Dict[str, Any]:
+    """
+    Expose last chaos-monkey job status.
+
+    Backed by state/chaos_status.json written by the chaos job.
+    """
+    if not CHAOS_STATE_FILE.exists():
+        logger.warning("chaos_status_missing", extra={"state_file": str(CHAOS_STATE_FILE)})
+        return {"status": "unknown", "detail": "no_chaos_state"}
+
+    try:
+        import json
+
+        payload = json.loads(CHAOS_STATE_FILE.read_text())
+        return payload
+    except Exception as exc:
+        logger.error(
+            "chaos_status_read_error",
+            extra={"state_file": str(CHAOS_STATE_FILE), "error": str(exc)},
+        )
+        return {"status": "error", "detail": "failed_to_read_chaos_state"}
 
 
 if __name__ == "__main__":
