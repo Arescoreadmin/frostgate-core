@@ -1,21 +1,54 @@
-import os
+from functools import lru_cache
 
-from pydantic import BaseModel
-
-
-class Settings(BaseModel):
-    env: str = os.getenv("FG_ENV", "dev")
-    log_indexer_url: str = os.getenv("LOG_INDEXER_URL", "http://loki:3100")
-    pq_fallback_header: str = os.getenv("PQ_FALLBACK_HEADER", "x-pq-fallback")
-
-    # enforce | observe
-    enforcement_mode: str = os.getenv("FG_ENFORCEMENT_MODE", "enforce").lower()
-
-    ai_adversarial_threshold: float = float(os.getenv("AI_ADV_SCORE_THRESHOLD", "0.8"))
-    clock_drift_warn_ms: int = int(os.getenv("CLOCK_DRIFT_WARN_MS", "1000"))
-
-    # Global API key (optional). If empty, auth is disabled.
-    api_key: str | None = os.getenv("FG_API_KEY") or None
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-settings = Settings()
+class Settings(BaseSettings):
+    """
+    FrostGate core settings loaded from environment.
+
+    Env prefix: FG_
+      FG_ENV
+      FG_ENFORCEMENT_MODE
+      FG_API_KEY
+      FG_PQ_FALLBACK_HEADER (optional override)
+    """
+
+    # Pydantic v2-style config
+    model_config = SettingsConfigDict(
+        env_prefix="FG_",
+        extra="ignore",
+    )
+
+    # Core env
+    env: str = "dev"
+    service: str = "frostgate-core"
+    enforcement_mode: str = "enforce"
+
+    # API key auth
+    api_key: str | None = None
+    auth_enabled: bool = False
+
+    # Header name used for pq_fallback flag on /defend
+    pq_fallback_header: str = "x-pq-fallback"
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        """
+        Construct settings from env and derive auth_enabled.
+        """
+        settings = cls()
+        settings.auth_enabled = bool(settings.api_key)
+        return settings
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """
+    Cached settings accessor for app code.
+    """
+    return Settings.from_env()
+
+
+# Backwards-compat: some modules do `from api.config import settings`
+settings = get_settings()

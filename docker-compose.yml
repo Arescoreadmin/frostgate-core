@@ -7,21 +7,19 @@ services:
     environment:
       FG_ENV: dev
       FG_ENFORCEMENT_MODE: ${FG_ENFORCEMENT_MODE:-enforce}
+      FG_API_KEY: ${FG_API_KEY:-}   # ← THIS is the missing piece
     volumes:
       - ./state:/app/state
     ports:
       - "8080:8080"
-    restart: unless-stopped
 
   supervisor:
     build:
       context: ./supervisor-sidecar
+      dockerfile: Dockerfile
     container_name: frostgate-supervisor
     environment:
       FG_CORE_BASE_URL: http://core-api:8080
-      SUPERVISOR_LISTEN_ADDR: ":9090"
-    depends_on:
-      - core-api
     ports:
       - "9090:9090"
     restart: unless-stopped

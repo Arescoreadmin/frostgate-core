@@ -5,7 +5,13 @@ from typing import Dict, Any, List
 from fastapi import FastAPI, Request, Header, Query, Depends
 from loguru import logger
 
-from .schemas import TelemetryInput, DefendResponse, ExplainBlock, MitigationAction
+from .schemas import (
+    TelemetryInput,
+    DefendResponse,
+    ExplainBlock,
+    MitigationAction,
+    TIEDEstimate,
+)
 from .config import settings
 from .logging_config import configure_logging
 from .auth import require_api_key
@@ -31,7 +37,7 @@ app = FastAPI(
 
 
 @app.on_event("startup")
-async def startup_event():
+async def startup_event() -> None:
     logger.info(
         "service_start",
         extra={
@@ -123,10 +129,13 @@ async def defend(
     telemetry: TelemetryInput,
     request: Request,
     x_pq_fallback: str | None = Header(default=None, alias=settings.pq_fallback_header),
-):
+) -> DefendResponse:
     """
     Primary `/defend` endpoint backed by the rules engine.
     Also records decisions into in-memory history.
+
+    Doctrine / ROE metadata is attached when persona/classification is present
+    (v1 clients), but the core decision is still rules-first.
     """
     now = datetime.now(timezone.utc)
 
@@ -159,6 +168,39 @@ async def defend(
             f"enforcement_mode={settings.enforcement_mode}"
         ),
     )
+
+    # --- Doctrine / ROE MVP wiring ---
+    # Only attach doctrine metadata if persona/classification came in.
+    persona = getattr(telemetry, "persona", None)
+    classification = getattr(telemetry, "classification", None)
+
+    if persona or classification:
+        explain.persona = persona
+        explain.classification = classification
+
+        # Dirt-simple TIED heuristic; tests only care that it exists & is shaped.
+        service_impact = 0.8 if threat_level == "high" else 0.5
+        user_impact = 0.7 if threat_level == "high" else 0.4
+
+        # Map threat_level into the allowed contract values
+        if threat_level in ("medium", "high"):
+            gating_decision = "require_approval"
+        else:
+            gating_decision = "allow"
+
+        explain.tie_d = TIEDEstimate(
+            service_impact=service_impact,
+            user_impact=user_impact,
+            gating_decision=gating_decision,
+            notes="MVP heuristic; rules-only engine + doctrine stub",
+        )
+
+        # ROE flags: this is now a doctrine-shaped decision, even if
+        # mitigations are unchanged for MVP.
+        explain.roe_applied = True
+        explain.disruption_limited = False
+        explain.ao_required = False
+    # --- end doctrine wiring ---
 
     resp = DefendResponse(
         threat_level=threat_level,

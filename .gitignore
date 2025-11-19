@@ -11,3 +11,4 @@ node_modules/
 .vscode/
 coverage/
 pytest_cache/
+supervisor-sidecar/supervisor-sidecar

@@ -4,6 +4,10 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 
+import os
+
+API_KEY = os.getenv("FG_API_KEY", "supersecret")
+
 
 client = TestClient(app)
 
@@ -25,10 +29,14 @@ def test_defend_high_bruteforce_response():
     payload = _base_payload(failed_auths=12)
 
     resp = client.post(
-        "/defend",
-        headers={"Content-Type": "application/json", "x-pq-fallback": "1"},
-        json=payload,
-    )
+    "/defend",
+    headers={
+        "Content-Type": "application/json",
+        "x-pq-fallback": "1",
+        "x-api-key": "supersecret",  # or read from env if you prefer
+    },
+    json=payload,
+)
     assert resp.status_code == 200
 
     data = resp.json()
