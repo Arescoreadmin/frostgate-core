@@ -1,7 +1,7 @@
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 
-from tests.test_auth import build_app  # reuse the helper so FG_API_KEY is set
+from tests.test_auth import build_app  # reuse helper so FG_API_KEY is set
 
 
 @pytest.mark.asyncio
@@ -15,7 +15,8 @@ async def test_guardian_disruption_limit_and_roe_flags():
     """
     app = build_app(auth_enabled=True)
 
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
             "/v1/defend",
             headers={"x-api-key": "supersecret"},
@@ -36,18 +37,15 @@ async def test_guardian_disruption_limit_and_roe_flags():
     assert resp.status_code == 200
     data = resp.json()
 
-    # Basic shape
     assert data["threat_level"] in ("medium", "high")
     assert "mitigations" in data
     assert "explain" in data
 
     actions = [m["action"] for m in data["mitigations"]]
-    # Guardian shouldn't go nuclear: cap block_ip actions
     assert actions.count("block_ip") <= 1
 
     explain = data["explain"]
 
-    # ROE & doctrine fields should be present and sane
     assert explain.get("roe_applied") is True
     assert explain.get("disruption_limited") in (True, False)
     assert explain.get("ao_required") in (True, False)
@@ -66,13 +64,14 @@ async def test_guardian_disruption_limit_and_roe_flags():
 async def test_sentinel_can_allow_more_disruption():
     """
     Sentinel persona is allowed to be more aggressive than guardian.
-    We don't hard-assert exact numbers, but we ensure:
+    We ensure:
       - same scenario with sentinel does NOT have *stricter* mitigations
         than guardian in terms of block_ip count.
     """
     app = build_app(auth_enabled=True)
 
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         base_payload = {
             "source": "edge-gateway-1",
             "tenant_id": "tenant-doctrine-compare",
@@ -99,11 +98,11 @@ async def test_sentinel_can_allow_more_disruption():
     assert guardian_resp.status_code == 200
     assert sentinel_resp.status_code == 200
 
-    guardian_actions = [m["action"] for m in guardian_resp.json()["mitigations"]]
-    sentinel_actions = [m["action"] for m in sentinel_resp.json()["mitigations"]]
+    g_actions = [m["action"] for m in guardian_resp.json()["mitigations"]]
+    s_actions = [m["action"] for m in sentinel_resp.json()["mitigations"]]
 
-    guardian_blocks = guardian_actions.count("block_ip")
-    sentinel_blocks = sentinel_actions.count("block_ip")
+    guardian_blocks = g_actions.count("block_ip")
+    sentinel_blocks = s_actions.count("block_ip")
 
-    # Sentinel should not be *less* willing to block than guardian in same scenario.
+    # Sentinel should not be *more* restrictive than guardian
     assert sentinel_blocks >= guardian_blocks

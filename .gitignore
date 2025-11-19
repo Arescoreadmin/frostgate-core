@@ -12,3 +12,5 @@ node_modules/
 coverage/
 pytest_cache/
 supervisor-sidecar/supervisor-sidecar
+
+supervisor-sidecar/supervisor-sidecar
