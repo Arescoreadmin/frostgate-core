@@ -1,0 +1,11 @@
+apiVersion: v2
+name: frostgate-core
+description: FrostGate core API + supervisor sidecar
+type: application
+version: 0.1.0
+appVersion: "0.8.0"
+keywords:
+  - frostgate
+  - security
+  - chaos engineering
+  - api

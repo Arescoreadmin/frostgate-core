@@ -1,23 +1,64 @@
-version: "3.9"
-
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fg_user
+      POSTGRES_PASSWORD: STRONG_PASSWORD
+      POSTGRES_DB: frostgate
+    ports:
+      - "5432:5432"
+    volumes:
+      - fg_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
   frostgate-core:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: frostgate-core
-    environment:
-      # Base app config
-      FROSTGATE_ENV: "dev"
-      FROSTGATE_ENFORCEMENT_MODE: "observe"
-      FROSTGATE_LOG_LEVEL: "DEBUG"
+    image: frostgate-core:latest
 
-      # API key / tenant for local smoke
-      # This should match whatever your tools.tenants CLI emits if you want real multi-tenant auth.
-      FROSTGATE_API_KEY: "dev-local-supersecret"
+    # ✅ command goes here (service level), not under build
+    command: ["sh", "-lc", "python -m uvicorn api.main:app --host 0.0.0.0 --port 8080"]
+
+
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      FG_ENV: prod
+      FG_DEBUG: "false"
+
+      FG_API_HOST: 0.0.0.0
+      FG_API_PORT: "8080"
+
+      FG_DB_URL: "${FG_DB_URL}"
+
+      FG_API_KEYS: tenant-test=supersecret,tenant-a=supersecret,tenant-b=supersecret
+
+      FG_RL_ENABLED: "true"
+      FG_RL_BACKEND: redis
+      FG_REDIS_URL: redis://redis:6379/0
+      FG_RL_SCOPE: tenant
+      FG_RL_PATHS: /defend
+      FG_RL_RATE_PER_SEC: "2"
+      FG_RL_BURST: "60"
+      FG_RL_PREFIX: fg:rl:prod
+      FG_RL_ALLOW_BYPASS_IN_PROD: "false"
+      FG_RL_DEMO_KEY_PREFIX: demo_
+      FG_RL_FAIL_OPEN: "false"
+
+      FG_METRICS_ENABLED: "true"
+      FG_LOG_LEVEL: info
+
     ports:
-      - "8080:8080"
+      - "18080:8080"
     volumes:
-      # Persist anchor / chaos state
       - ./state:/app/state
     restart: unless-stopped
+
+volumes:
+  fg_pgdata:

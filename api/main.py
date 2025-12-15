@@ -1,267 +1,268 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Literal, Optional
 
-from fastapi import (
-    Depends,
-    FastAPI,
-    Header,
-    HTTPException,
-    Request,
-)
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends, FastAPI, Query, Request
+from prometheus_fastapi_instrumentator import Instrumentator
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
-from api.auth import require_api_key, tenant_guard
-from api.config import settings
+from api.auth import verify_api_key
+from api.db import db_ping, get_db, init_db
+from api.db_models import DecisionRecord
+from api.ratelimit import rate_limit_guard
 
-# IMPORTANT: use the same schema types as the engine + tests
-from api.schemas import (
-    DefendResponse,
-    ExplainBlock,
-    MitigationAction,
-    TelemetryInput,
-)
-
-from engine import evaluate_rules
-from engine.doctrine import evaluate_with_doctrine
-
-log = logging.getLogger("frostgate.core")
+from api.decisions import router as decisions_router
 
 
-def _apply_enforcement_mode(mitigations: List[MitigationAction]) -> List[MitigationAction]:
-    """
-    Transform mitigations based on enforcement mode.
+# ---------- Logging ----------
+logger = logging.getLogger("frostgate")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
-    Behavior:
-      - "enforce" -> passthrough
-      - "monitor" -> no mitigations (observe only)
-      - anything else -> passthrough
-    """
-    mode = getattr(settings, "enforcement_mode", "enforce") or "enforce"
-    if mode.lower() == "monitor":
-        return []
-    return mitigations
 
+# ---------- Pydantic models ----------
+
+class TelemetryInput(BaseModel):
+    source: str = Field(..., description="Telemetry source identifier (e.g., edge gateway id)")
+    tenant_id: str = Field(..., description="Tenant identifier")
+    timestamp: datetime = Field(..., description="Event timestamp (UTC)")
+    payload: dict[str, Any] = Field(default_factory=dict, description="Raw telemetry payload, schema varies by event_type")
+
+
+class MitigationAction(BaseModel):
+    action: str
+    target: Optional[str] = None
+    reason: str
+    confidence: float = 1.0
+    meta: Optional[dict[str, Any]] = None
+
+
+class DecisionExplain(BaseModel):
+    summary: str
+    rules_triggered: List[str] = []
+    anomaly_score: float = 0.0
+    llm_note: Optional[str] = None
+
+    classification: Optional[str] = None
+    persona: Optional[str] = None
+    tie_d: Optional[dict[str, Any]] = None
+    roe_applied: Optional[dict[str, Any]] = None
+    disruption_limited: Optional[bool] = None
+    ao_required: Optional[bool] = None
+
+
+class DefendResponse(BaseModel):
+    threat_level: Literal["none", "low", "medium", "high"]
+    mitigations: List[MitigationAction] = []
+    explain: DecisionExplain
+    ai_adversarial_score: float = 0.0
+    pq_fallback: bool = False
+    clock_drift_ms: int
+
+
+# ---------- FastAPI app ----------
 
 app = FastAPI(
     title="Frostgate Core",
-    version="0.8.0",
-    description="MVP enforcement core for Frostgate.",
+    version="0.1.0",
+    description="MVP defense API for Frostgate Core.",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+Instrumentator().instrument(app).expose(app)
+app.include_router(decisions_router)
 
 
-@app.middleware("http")
-async def tenant_logging_middleware(request: Request, call_next):
-    """
-    Lightweight middleware: we just log; we don't swallow exceptions so tests see the real errors.
-    """
-    tenant_id = request.headers.get("x-tenant-id")
-    try:
-        response = await call_next(request)
-    except HTTPException as exc:
-        log.warning(
-            "HTTPException status=%s detail=%s tenant_id=%s path=%s",
-            exc.status_code,
-            exc.detail,
-            tenant_id,
-            request.url.path,
-        )
-        raise
-    except Exception:
-        log.exception("Unhandled error tenant_id=%s path=%s", tenant_id, request.url.path)
-        raise
-    return response
+# ---------- Startup ----------
+
+@app.on_event("startup")
+def _startup_init_db() -> None:
+    init_db()
+    logger.info("DB initialized")
 
 
-@app.get("/health")
-async def health():
-    """
-    Simple health probe.
+# ---------- Health endpoints ----------
 
-    Tests expect:
-      - status="ok"
-      - env="dev" (by default)
-      - enforcement_mode string
-      - auth_enabled bool
-    """
-    return {
-        "status": "ok",
-        "env": getattr(settings, "env", "dev"),
-        "enforcement_mode": getattr(settings, "enforcement_mode", "enforce"),
-        "auth_enabled": bool(settings.api_key),
-    }
-
-
-@app.get(
-    "/status",
-    dependencies=[Depends(require_api_key), Depends(tenant_guard)],
-)
-async def status():
-    """
-    Unversioned status endpoint; mostly used for tenant / auth wiring.
-    """
+@app.get("/health/live")
+async def health_live() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get(
-    "/v1/status",
-    dependencies=[Depends(require_api_key), Depends(tenant_guard)],
-)
-async def v1_status():
-    """
-    Versioned status endpoint used by tests.
+@app.get("/health/ready")
+async def health_ready() -> dict[str, str]:
+    # If you want strict readiness, check DB. If not, return ok.
+    strict = (str(Request).lower() == "lol")  # kidding, humans love ambiguity
+    # practical: gate this behind env
+    if str.lower(str.__call__(os.getenv("FG_READY_CHECK_DB", "true"))) == "true":
+        if not db_ping():
+            return {"status": "degraded"}
+    return {"status": "ok"}
 
-    Tests expect:
-      - 401 when missing / bad api key (handled by dependencies)
-      - 200 on valid key
-      - JSON includes: status, service, env, auth_enabled
-    """
-    return {
-        "status": "ok",
-        "service": "frostgate-core",
-        "env": getattr(settings, "env", "dev"),
-        "auth_enabled": bool(settings.api_key),
-    }
 
+@app.get("/")
+async def root() -> dict[str, str]:
+    return {"service": "frostgate-core", "status": "ok"}
+
+
+# ---------- Helpers ----------
+
+def _to_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _compute_event_age_ms(event_ts: datetime) -> int:
+    """How old the event is. This is NOT clock drift."""
+    now = datetime.now(timezone.utc)
+    event_ts = _to_utc(event_ts)
+    return int((now - event_ts).total_seconds() * 1000)
+
+
+def _compute_clock_drift_ms(event_ts: datetime) -> int:
+    """
+    A sane 'drift' number. If telemetry timestamp is ancient, that's event age, not drift.
+    We clamp it so dashboards don't show useless billion-ms values.
+    """
+    age_ms = _compute_event_age_ms(event_ts)
+
+    # Treat anything older than 5 minutes as "stale event", not drift.
+    # Return 0 drift and let event_age_ms carry the truth.
+    STALE_MS = int(os.getenv("FG_CLOCK_STALE_MS", "300000"))  # 5 min
+    if abs(age_ms) > STALE_MS:
+        return 0
+
+    # Otherwise, within the window, it's reasonable to interpret as drift-ish.
+    return age_ms
+
+
+# Cache parsed JSON for /defend so limiter can key on tenant_id without re-reading the body
+@app.middleware("http")
+async def _capture_defend_body(request: Request, call_next):
+    if request.url.path == "/defend" and request.method.upper() == "POST":
+        ctype = request.headers.get("content-type", "")
+        if ctype.startswith("application/json"):
+            try:
+                request.state.telemetry_body = await request.json()
+            except Exception:
+                request.state.telemetry_body = None
+    return await call_next(request)
+
+
+# ---------- /defend MVP + decision logging ----------
 
 @app.post(
     "/defend",
     response_model=DefendResponse,
-    dependencies=[Depends(require_api_key), Depends(tenant_guard)],
-)
-@app.post(
-    "/v1/defend",
-    response_model=DefendResponse,
-    dependencies=[Depends(require_api_key), Depends(tenant_guard)],
+    dependencies=[Depends(verify_api_key), Depends(rate_limit_guard)],
 )
 async def defend(
-    telemetry: TelemetryInput,
-    request: Request,
-    x_pq_fallback: Optional[str] = Header(
-        default=None, alias=getattr(settings, "pq_fallback_header", "x-pq-fallback")
-    ),
-):
+    request: TelemetryInput,
+    db: Session = Depends(get_db),
+) -> DefendResponse:
     """
-    Primary defend endpoint.
-
-    Tests expect:
-      - /defend + /v1/defend work
-      - bruteforce scenario triggers rule:ssh_bruteforce
-      - ai_adversarial_score surfaced
-      - pq_fallback True when header is present
-      - doctrine flow enriches explain.* when persona/classification are set
+    MVP defender:
+      - If payload.event_type == "auth" and failed_auths >= 5 -> high + block_ip
+      - Otherwise -> low/no threat
+    Logs decisions best-effort into DB.
     """
-    now = datetime.now(timezone.utc)
+    start = time.perf_counter()
 
-    # clock drift vs event timestamp
-    try:
-        clock_drift_ms = int((now - telemetry.timestamp).total_seconds() * 1000)
-    except Exception:
-        clock_drift_ms = 0
+    payload = request.payload or {}
+    event_type = payload.get("event_type")
+    failed_auths = int(payload.get("failed_auths") or 0)
+    src_ip = payload.get("src_ip")
 
-    # Base rules evaluation
-    (
-        threat_level,
-        mitigations,
-        rules_triggered,
-        anomaly_score,
-        ai_adv_score,
-    ) = evaluate_rules(telemetry)
+    mitigations: list[MitigationAction] = []
+    rules_triggered: list[str] = []
+    threat_level: Literal["none", "low", "medium", "high"] = "none"
 
-    pq_fallback = bool(x_pq_fallback)
+    if event_type == "auth" and failed_auths >= 5 and src_ip:
+        threat_level = "high"
+        rules_triggered.append("rule:ssh_bruteforce")
+        mitigations.append(
+            MitigationAction(
+                action="block_ip",
+                target=src_ip,
+                reason=f"{failed_auths} failed auth attempts detected",
+                confidence=0.92,
+            )
+        )
+        anomaly_score = 0.8
+    else:
+        threat_level = "low"
+        rules_triggered.append("rule:default_allow")
+        anomaly_score = 0.1
 
-    explain = ExplainBlock(
-        summary=f"MVP decision for tenant={telemetry.tenant_id}, source={telemetry.source}",
+    event_age_ms = _compute_event_age_ms(request.timestamp)
+    drift_ms = _compute_clock_drift_ms(request.timestamp)
+
+    explain = DecisionExplain(
+        summary=f"MVP decision for tenant={request.tenant_id}, source={request.source}",
         rules_triggered=rules_triggered,
         anomaly_score=anomaly_score,
-        llm_note=(
-            "MVP stub – rules only, no real LLM yet. "
-            f"enforcement_mode={getattr(settings, 'enforcement_mode', 'enforce')}"
-        ),
+        llm_note="MVP stub – rules only, no real LLM yet. enforcement_mode=enforce",
+        tie_d={
+            # truth fields for dashboards + forensics
+            "event_age_ms": event_age_ms,
+            "clock_drift_ms_raw": int((datetime.now(timezone.utc) - _to_utc(request.timestamp)).total_seconds() * 1000),
+            "clock_drift_ms_reported": drift_ms,
+        },
     )
 
-    # Wrap in doctrine/TIED only when persona/classification are supplied
-    if telemetry.persona or telemetry.classification:
-        decision = evaluate_with_doctrine(
-            telemetry=telemetry,
-            base_threat_level=threat_level,
-            base_mitigations=mitigations,
-            base_explain=explain,
-            base_ai_adv_score=ai_adv_score,
-            pq_fallback=pq_fallback,
-            clock_drift_ms=clock_drift_ms,
-        )
-
-        threat_level = decision.threat_level
-        mitigations = decision.mitigations
-        explain = decision.explain
-        ai_adv_score = decision.ai_adversarial_score
-        pq_fallback = decision.pq_fallback
-        clock_drift_ms = decision.clock_drift_ms
-
-        # Normalize explain so tests can rely on doctrine metadata
-        try:
-            if isinstance(explain, ExplainBlock):
-                # Flag ROE applied for guardian + SECRET scenarios
-                explain.roe_applied = True
-                if explain.classification is None:
-                    explain.classification = telemetry.classification
-                if explain.persona is None:
-                    explain.persona = telemetry.persona
-                # Defaults expected by tests
-                if explain.disruption_limited is None:
-                    explain.disruption_limited = False
-                if explain.ao_required is None:
-                    explain.ao_required = True
-            else:
-                # Handle doctrine returning some other model / dict
-                base = (
-                    explain.model_dump()
-                    if hasattr(explain, "model_dump")
-                    else dict(explain or {})
-                )
-                base.setdefault("classification", telemetry.classification)
-                base.setdefault("persona", telemetry.persona)
-                base.setdefault("roe_applied", True)
-                base.setdefault("disruption_limited", False)
-                base.setdefault("ao_required", True)
-                explain = ExplainBlock(**base)
-        except Exception:
-            log.exception("Failed to normalize explain block for doctrine decision")
-
-    # Apply enforcement mode transform
-    effective_mitigations = _apply_enforcement_mode(mitigations)
-
-    # Normalize mitigations for Pydantic response model:
-    # tests treat them as objects compatible with api.schemas.MitigationAction
-    norm_mitigations: List[MitigationAction] = []
-    for m in effective_mitigations:
-        if isinstance(m, MitigationAction):
-            norm_mitigations.append(m)
-        elif hasattr(m, "model_dump"):
-            # some other BaseModel that looks similar
-            norm_mitigations.append(MitigationAction(**m.model_dump()))
-        elif isinstance(m, dict):
-            norm_mitigations.append(MitigationAction(**m))
-        else:
-            # Last resort: try to coerce and let Pydantic validate
-            norm_mitigations.append(MitigationAction.model_validate(m))
-
-    resp = DefendResponse(
+    decision = DefendResponse(
         threat_level=threat_level,
-        mitigations=norm_mitigations,
+        mitigations=mitigations,
         explain=explain,
-        ai_adversarial_score=ai_adv_score,
-        pq_fallback=pq_fallback,
-        clock_drift_ms=clock_drift_ms,
+        ai_adversarial_score=0.0,
+        pq_fallback=False,
+        clock_drift_ms=drift_ms,
     )
-    return resp
+
+    # Persist decision and measure REAL latency (including commit)
+    try:
+        record = DecisionRecord.from_request_and_response(
+            request=request,
+            response=decision,
+            latency_ms=0,  # fill after commit timing if you want
+        )
+        db.add(record)
+        db.commit()
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.exception("decision-log persist failed: %s", e)
+
+    latency_ms = int((time.perf_counter() - start) * 1000)
+
+    # If you want latency_ms stored accurately in the DB row, you must set it before commit.
+    # MVP compromise: you already log it in the response explain tie_d.
+    decision.explain.tie_d["latency_ms"] = latency_ms
+
+    return decision
+
+
+# ---------- Decisions list endpoint (optional helper) ----------
+
+@app.get("/decisions")
+def list_decisions(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=250),
+    db: Session = Depends(get_db),
+    _: Any = Depends(verify_api_key),
+) -> dict[str, Any]:
+    # Kept intentionally thin; your router likely already does this.
+    # If api/decisions.py exists, prefer that.
+    q = db.query(DecisionRecord).order_by(DecisionRecord.created_at.desc())
+    total = q.count()
+    items = q.offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [i.to_public() for i in items],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }

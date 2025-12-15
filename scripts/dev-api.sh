@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+: "${FG_API_HOST:?FG_API_HOST not set}"
+: "${FG_API_PORT:?FG_API_PORT not set}"
 
-if [ ! -d ".venv" ]; then
-  echo "Missing .venv – create with: python3 -m venv .venv"
-  exit 1
-fi
+echo "Starting frostgate-core dev API on port ${FG_API_PORT}"
 
-source .venv/bin/activate
-uvicorn api.main:app --host 0.0.0.0 --port 8080 --reload
+exec uvicorn api.main:app \
+  --host "${FG_API_HOST}" \
+  --port "${FG_API_PORT}" \
+  --reload

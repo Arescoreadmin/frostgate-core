@@ -1,77 +1,147 @@
-# api/auth.py
 from __future__ import annotations
 
-from fastapi import Header, HTTPException, status
-from loguru import logger
+import os
+from typing import Optional
 
-from .config import settings
+from fastapi import Depends, HTTPException, Request, Header, status
+from fastapi.security import APIKeyHeader
 
-# Tenant registry is optional at import time so unit tests / tools still work
+# ---------- Optional tenant registry hook ----------
+
 try:
-    from tools.tenants.registry import get_tenant  # type: ignore
-except Exception:  # pragma: no cover - defensive fallback
-    get_tenant = None
+    # Optional tenant registry hook; tests can monkeypatch get_tenant()
+    from tools.tenants.registry import get_tenant as _registry_get_tenant
+except Exception:  # pragma: no cover
+    _registry_get_tenant = None
 
 
-class AuthError(HTTPException):
-    def __init__(self, detail: str = "Unauthorized"):
-        super().__init__(
+def get_tenant(tenant_id: str):
+    """
+    Lightweight shim so tests/other modules can monkeypatch api.auth.get_tenant.
+
+    In real usage, if tools.tenants.registry exists, delegate there.
+    Otherwise returns None (no tenant found).
+    """
+    if _registry_get_tenant is None:
+        return None
+    return _registry_get_tenant(tenant_id)
+
+
+# ---------- Global API key (FG_API_KEY) ----------
+
+# Header name we expect from callers (e.g., edge gateways, Spear)
+API_KEY_HEADER = APIKeyHeader(name="x-api-key", auto_error=False)
+
+
+def _get_expected_api_key() -> str:
+    """
+    Expected API key for Frostgate core.
+
+    In dev, default to 'supersecret' so you can hammer it with curl
+    without wiring extra env. In prod, FG_API_KEY **must** be set.
+    """
+    return os.getenv("FG_API_KEY", "supersecret")
+
+
+async def verify_api_key(api_key: Optional[str] = Depends(API_KEY_HEADER)) -> None:
+    """
+    FastAPI dependency that enforces the x-api-key header.
+
+    Used in api.main:
+
+        dependencies=[Depends(verify_api_key)]
+    """
+    expected = _get_expected_api_key()
+
+    if api_key is None:
+        raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
+            detail="Missing API key",
         )
 
+    if api_key != expected:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid API key",
+        )
+    # presence + match == OK
 
-async def require_api_key(
-    x_api_key: str | None = Header(default=None, alias="x-api-key"),
-    x_tenant_id: str | None = Header(default=None, alias="x-tenant-id"),
+
+# ---------- Tenant-aware guard (optional) ----------
+
+async def tenant_guard(
+    x_tenant_id: Optional[str] = Header(default=None, alias="x-tenant-id"),
+    x_api_key: Optional[str] = Header(default=None, alias="x-api-key"),
 ) -> None:
     """
-    API auth layer with two paths:
+    Tenant-aware guard layered *on top of* global API key.
 
-    1) Global operator key (legacy / CI contract):
-         - FG_API_KEY env var
-         - Header: x-api-key: <FG_API_KEY>
+    Behavior:
 
-    2) Per-tenant key from registry (tenant onboarding flow):
-         - Header: x-tenant-id: <tenant_id>
-         - Header: x-api-key: <tenant_api_key>
-
-    If FG_API_KEY is unset:
-      - Only tenant-based auth works (if registry is present).
-    If both are present:
-      - Either a matching global key OR a matching tenant key passes.
-
-    Return value is ignored by endpoints; this is a gate only.
+      - If NO x-tenant-id:
+          - Do nothing. Global API key still enforced by verify_api_key.
+      - If x-tenant-id IS present:
+          - x-api-key is required.
+          - Tenant must exist (get_tenant).
+          - tenant.status must be "active".
+          - tenant.api_key must match x-api-key.
     """
-
-    # If auth is globally disabled (FG_API_KEY unset *and* no registry),
-    # let traffic through. This keeps local dev simple.
-    if not settings.api_key and get_tenant is None:
+    # No tenant scope => allow through, rely on global key behavior.
+    if not x_tenant_id:
         return
 
-    # Fast path: global operator key (what your tests and CI expect)
-    if settings.api_key:
-        if x_api_key == settings.api_key:
-            return
+    # Tenant path: require tenant API key header
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="Missing tenant auth headers")
 
-    # Tenant-based auth (only if registry is available and tenant id is present)
-    if get_tenant is not None and x_tenant_id and x_api_key:
-        try:
-            tenant = get_tenant(x_tenant_id)
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error(
-                "tenant_registry_error",
-                extra={"tenant_id": x_tenant_id, "error": str(exc)},
-            )
-            raise AuthError("Tenant registry unavailable")
+    tenant = get_tenant(x_tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=401, detail="Unknown tenant")
 
-        if tenant is not None:
-            status_val = getattr(tenant, "status", "active")
-            api_key_val = getattr(tenant, "api_key", None)
+    status_val = getattr(tenant, "status", "active")
+    if status_val != "active":
+        # Covers "revoked" and any other non-active states
+        raise HTTPException(status_code=401, detail="Tenant not active")
 
-            if status_val == "active" and api_key_val and api_key_val == x_api_key:
-                # Auth ok for this tenant
-                return
+    tenant_key = getattr(tenant, "api_key", None)
+    if not tenant_key or tenant_key != x_api_key:
+        raise HTTPException(status_code=401, detail="Invalid tenant API key")
 
-    # If we got here, no valid key was found
-    raise AuthError("Invalid or missing API key")
+    # Valid tenant, active, key matches
+    return
+
+
+# ---------- Legacy / stub verify_tenant ----------
+
+async def verify_tenant(request: Request) -> None:
+    """
+    Legacy tenant guard stub.
+
+    For now, we just ensure a tenant identifier is present *somewhere*
+    (body or headers). You can delete this once everything is on tenant_guard().
+    """
+    # Try headers first
+    tenant_header = (
+        request.headers.get("x-tenant-id")
+        or request.headers.get("x-tenant")
+        or request.headers.get("tenant-id")
+    )
+
+    if tenant_header:
+        return
+
+    # Fallback: try JSON body with `tenant_id`
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    tenant_body = body.get("tenant_id") if isinstance(body, dict) else None
+
+    if tenant_body:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Missing tenant identifier",
+    )

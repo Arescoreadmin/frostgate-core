@@ -1,0 +1,8 @@
+charts/frostgate-core/
+  Chart.yaml
+  values.yaml
+  templates/
+    deployment.yaml
+    service.yaml
+    configmap.yaml
+    secret.yaml

@@ -14,3 +14,21 @@ pytest_cache/
 supervisor-sidecar/supervisor-sidecar
 
 supervisor-sidecar/supervisor-sidecar
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Env / secrets
+.env
+.env.*
+*.env
+
+# Local DB / volumes / state
+fg_pgdata/
+*.sqlite
+*.db
+
+# Logs
+*.log
+logs/

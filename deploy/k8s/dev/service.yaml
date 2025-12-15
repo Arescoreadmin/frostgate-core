@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frostgate-core
+  namespace: frostgate-dev
+spec:
+  selector:
+    app: frostgate-core
+  ports:
+    - name: http
+      port: 8000        # cluster-facing port
+      targetPort: 8080  # container port

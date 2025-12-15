@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frostgate-core
+  labels:
+    app: frostgate-core
+spec:
+  selector:
+    app: frostgate-core
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+  type: ClusterIP

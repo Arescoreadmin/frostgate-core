@@ -1,0 +1,98 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/your-org-or-user/frostgate-core
+  tag: "v0.8.0"
+  pullPolicy: IfNotPresent
+
+sidecarImage:
+  repository: ghcr.io/your-org-or-user/frostgate-supervisor-sidecar
+  tag: "v0.8.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+  # - name: regcred
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: frostgate.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # - hosts:
+  #     - frostgate.local
+  #   secretName: frostgate-tls
+
+resources:
+  core:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  sidecar:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+env:
+  # Non-sensitive config pushed via ConfigMap
+  FROSTGATE_ENV: "prod"
+  FROSTGATE_ENFORCEMENT_MODE: "enforce"  # or "observe"
+  FROSTGATE_LOG_LEVEL: "INFO"
+
+  # Add any other non-secret settings here as needed
+  # EXAMPLE_EXTRA_CONFIG: "value"
+
+secrets:
+  # Option 1: raw value (local/dev). Do NOT use this in real prod.
+  frostgateApiKey: ""
+  # Option 2: reference existing secret (e.g., created via SealedSecret)
+  existingSecret:
+    name: ""
+    key: "frostgate-api-key"
+
+tenantRegistry:
+  # If the app ever reads a tenants registry path / config, wire it here
+  enabled: false
+  configPath: "/data/tenants/registry.json"
+
+serviceMonitor:
+  enabled: false
+
+securityContext:
+  core:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    readOnlyRootFilesystem: true
+  sidecar:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    readOnlyRootFilesystem: true

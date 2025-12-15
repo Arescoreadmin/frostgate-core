@@ -1,0 +1,122 @@
+diff --git a/api/config.py b/api/config.py
+index 5b4b4d3..e3b2a11 100644
+--- a/api/config.py
++++ b/api/config.py
+@@ -1,7 +1,9 @@
+-from pydantic_settings import BaseSettings
++from pydantic_settings import BaseSettings, SettingsConfigDict
+ 
+ 
+ class Settings(BaseSettings):
+     env: str = "dev"
+     enforcement_mode: str = "observe"
+     log_level: str = "INFO"
+@@ -9,10 +11,22 @@ class Settings(BaseSettings):
+     api_key: str | None = None
+     auth_enabled: bool = False
+ 
+     pq_fallback_header: str = "x-pq-fallback"
+     tenant_header: str = "x-tenant-id"
++
++    # Map FROSTGATE_* env vars directly
++    model_config = SettingsConfigDict(
++        env_prefix="FROSTGATE_",
++        extra="ignore",
++    )
+ 
+ 
+-# Construct settings from env and derive auth_enabled.
+-settings = Settings()
+-settings.auth_enabled = bool(settings.api_key)
++def get_settings() -> Settings:
++    """
++    Load settings from env and derive auth_enabled from presence of API key.
++    No global caching on purpose so tests can flip env between app builds.
++    """
++    settings = Settings()
++    # auth_enabled is effectively "API key configured"
++    settings.auth_enabled = bool(settings.api_key)
++    return settings
+diff --git a/api/auth.py b/api/auth.py
+index 4e7c3d5..3f1b8f2 100644
+--- a/api/auth.py
++++ b/api/auth.py
+@@ -1,12 +1,23 @@
+-import os
+-from fastapi import Depends, Header, HTTPException
++import os
++from fastapi import Header, HTTPException
++
++from api.config import get_settings
+ 
+ 
+-async def require_api_key(
+-    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+-) -> None:
+-    expected = os.getenv("FROSTGATE_API_KEY") or os.getenv("FG_API_KEY")
+-    if not expected:
+-        # Auth disabled when no key configured
+-        return
+-    if x_api_key != expected:
+-        raise HTTPException(status_code=401, detail="Invalid API key")
++async def require_api_key(
++    x_api_key: str | None = Header(default=None, alias="x-api-key"),
++) -> None:
++    """
++    API key guard:
++      - auth_enabled is derived from settings (presence of API key)
++      - if disabled, short-circuit
++      - if enabled but key missing, 500 (misconfig)
++      - if wrong key, 401
++    """
++    settings = get_settings()
++
++    if not settings.auth_enabled:
++        return
++
++    expected = settings.api_key or os.getenv("FROSTGATE_API_KEY") or os.getenv("FG_API_KEY")
++    if not expected:
++        raise HTTPException(status_code=500, detail="API key not configured")
++
++    if x_api_key != expected:
++        raise HTTPException(status_code=401, detail="Invalid API key")
+diff --git a/api/main.py b/api/main.py
+index 3a8b7f0..f9e4b2a 100644
+--- a/api/main.py
++++ b/api/main.py
+@@ -8,7 +8,7 @@ from loguru import logger
+ from fastapi import Depends, FastAPI, Header, HTTPException, Request
+ from fastapi.responses import JSONResponse
+ 
+-from api.config import settings
++from api.config import get_settings
+ from api.auth import require_api_key
+ from engine.rules import evaluate_rules
+ from engine.types import (
+@@ -185,13 +185,16 @@ async def tenant_logging_middleware(request: Request, call_next):
+     return response
+ 
+ 
+ @app.get("/health", response_model=HealthResponse)
+ async def health() -> Dict[str, Any]:
++    settings = get_settings()
+     return {
+         "status": "ok",
+         "env": settings.env,
+         "enforcement_mode": settings.enforcement_mode,
+-        "auth_enabled": bool(settings.api_key),
++        # Reflects derived flag, not direct env probe
++        "auth_enabled": settings.auth_enabled,
+     }
+@@ -204,13 +207,16 @@ async def health() -> Dict[str, Any]:
+ 
+ @app.get("/status")
+ async def status() -> Dict[str, Any]:
++    settings = get_settings()
+     return {
+         "status": "ok",
+         "env": settings.env,
+         "enforcement_mode": settings.enforcement_mode,
+-        "auth_enabled": bool(settings.api_key),
++        "auth_enabled": settings.auth_enabled,
+     }

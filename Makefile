@@ -1,9 +1,8 @@
 # Makefile
 
-# ---- Meta ----
 SHELL := /bin/bash
 
-# Image coordinates (override in CI if needed)
+# Image coordinates
 REGISTRY        ?= ghcr.io
 IMAGE_OWNER     ?= your-org-or-user
 CORE_IMAGE_NAME ?= frostgate-core
@@ -12,15 +11,15 @@ SIDE_IMAGE_NAME ?= frostgate-supervisor-sidecar
 CORE_IMAGE      := $(REGISTRY)/$(IMAGE_OWNER)/$(CORE_IMAGE_NAME)
 SIDE_IMAGE      := $(REGISTRY)/$(IMAGE_OWNER)/$(SIDE_IMAGE_NAME)
 
-# Version from git; falls back to "dev"
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-# Python env
-VENV ?= .venv
-PYTHON ?= $(VENV)/bin/python
-PIP ?= $(VENV)/bin/pip
+VENV    ?= .venv
+PYTHON  ?= $(VENV)/bin/python
+PIP     ?= $(VENV)/bin/pip
 
-# ---- Local dev / test ----
+# ----------------------------
+# Local Dev
+# ----------------------------
 
 .PHONY: venv
 venv:
@@ -29,18 +28,22 @@ venv:
 	$(PIP) install -r requirements.txt -r requirements-dev.txt
 
 .PHONY: test
-test:  ## Run Python test suite
+test:
 	PYTHONPATH=. $(PYTHON) -m pytest -q
 
-.PHONY: ci
-ci:  ## CI entrypoint: tests + sidecar build
-	PYTHONPATH=. $(PYTHON) -m pytest -q
+.PHONY: build
+build:
 	cd supervisor-sidecar && go build ./...
 
-# ---- Docker build / publish ----
+.PHONY: ci
+ci: test build
+
+# ----------------------------
+# Docker
+# ----------------------------
 
 .PHONY: docker-build
-docker-build:  ## Build both images with VERSION tag
+docker-build:
 	docker build \
 		-t $(CORE_IMAGE):$(VERSION) \
 		-t $(CORE_IMAGE):latest \
@@ -51,16 +54,18 @@ docker-build:  ## Build both images with VERSION tag
 		supervisor-sidecar
 
 .PHONY: docker-push
-docker-push:  ## Push both images (VERSION + latest)
+docker-push:
 	docker push $(CORE_IMAGE):$(VERSION)
 	docker push $(CORE_IMAGE):latest
 	docker push $(SIDE_IMAGE):$(VERSION)
 	docker push $(SIDE_IMAGE):latest
 
 .PHONY: docker-release
-docker-release: docker-build docker-push  ## Build + push in one shot
+docker-release: docker-build docker-push
 
-# ---- Utility ----
+# ----------------------------
+# Utilities
+# ----------------------------
 
 .PHONY: print-version
 print-version:
@@ -71,27 +76,52 @@ print-images:
 	@echo "Core: $(CORE_IMAGE):$(VERSION)"
 	@echo "Sidecar: $(SIDE_IMAGE):$(VERSION)"
 
+# ----------------------------
+# Tenant Tools
+# ----------------------------
+
 .PHONY: tenant-add
-tenant-add:  ## Create tenant: make tenant-add TENANT_ID=foo
+tenant-add:
 	@test -n "$(TENANT_ID)" || (echo "TENANT_ID is required" && exit 1)
 	PYTHONPATH=. $(PYTHON) -m tools.tenants add $(TENANT_ID)
 
 .PHONY: tenant-list
-tenant-list:  ## List tenants in registry
+tenant-list:
 	PYTHONPATH=. $(PYTHON) -m tools.tenants list
 
-.PHONY: docker-build docker-run docker-shell
+# ----------------------------
+# Local docker convenience
+# ----------------------------
 
-docker-build:
-\tdocker build -t frostgate-core:local .
+.PHONY: docker-build-local docker-run docker-shell
+
+docker-build-local:
+	docker build -t frostgate-core:local .
 
 docker-run:
-\tdocker run --rm -p 8080:8080 \
-\t  -e FROSTGATE_ENV=dev \
-\t  -e FROSTGATE_ENFORCEMENT_MODE=observe \
-\t  -e FROSTGATE_LOG_LEVEL=DEBUG \
-\t  frostgate-core:local
+	docker run --rm -p 8080:8080 \
+	  -e FROSTGATE_ENV=dev \
+	  -e FROSTGATE_ENFORCEMENT_MODE=observe \
+	  -e FROSTGATE_LOG_LEVEL=DEBUG \
+	  frostgate-core:local
 
 docker-shell:
-\tdocker run --rm -it frostgate-core:local /bin/bash
+	docker run --rm -it frostgate-core:local /bin/bash
+
+.PHONY: test build-dev build-prod deploy-dev deploy-prod
+
+test:
+	ENVIRONMENT=dev scripts/test.sh
+
+build-dev:
+	ENVIRONMENT=dev PUSH_IMAGE=0 scripts/build.sh
+
+build-prod:
+	ENVIRONMENT=prod scripts/build.sh
+
+deploy-dev:
+	ENVIRONMENT=dev scripts/deploy_dev.sh
+
+deploy-prod:
+	ENVIRONMENT=prod VERSION=$(VERSION) scripts/deploy_prod.sh
 
