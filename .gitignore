@@ -34,3 +34,45 @@ fg_pgdata/
 logs/
 .env
 .env
+# local/debug artifacts
+*.bak
+*.bak.*
+*.log
+*.tmp
+
+# accidental json dumps / exports
+*.json
+
+# local state
+state/
+*.sqlite*
+__pycache__/
+.pytest_cache/
+.venv/
+# ---- FrostGate runtime/state ----
+state/
+*.log
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+.venv*/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Local DB artifacts (never commit) ----
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# ---- OS / editor ----
+.DS_Store
+.vscode/
+.idea/

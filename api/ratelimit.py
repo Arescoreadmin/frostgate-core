@@ -7,7 +7,7 @@ from typing import Any, Optional, Tuple
 
 from fastapi import Depends, HTTPException, Request
 
-from api.auth import verify_api_key
+from api.auth_scopes import verify_api_key
 
 try:
     import redis  # type: ignore

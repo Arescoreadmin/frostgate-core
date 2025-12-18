@@ -1,121 +1,99 @@
 from __future__ import annotations
 
-import os
 import logging
+import os
 from dataclasses import dataclass
-from typing import Callable, Optional, Set
+from typing import Callable, Dict, FrozenSet, Optional
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Security
 from fastapi.security import APIKeyHeader
-from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_403_FORBIDDEN
 
-log = logging.getLogger("frostgate.auth")
+log = logging.getLogger("frostgate")
 
 API_KEY_HEADER = APIKeyHeader(name="x-api-key", auto_error=False)
 
-# Scopes are strings like: "decisions:read", "defend:write"
-# Env format:
-#   FG_API_KEYS="ADMIN_abc|decisions:read,defend:write;AGENT_xyz|decisions:read"
-# Also support a legacy/global key:
-#   FG_API_KEY="ADMIN_..."   (treated as all-scopes for MVP)
-#   FG_ADMIN_KEY="ADMIN_..." (same)
+# Env formats supported:
+# 1) FG_API_KEYS="KEY1|scopeA,scopeB;KEY2|scopeC"
+# 2) Legacy: FG_API_KEY="KEY" (treated as admin-ish)
+# 3) Optional: FG_ADMIN_KEY / FG_AGENT_KEY (we'll also fold these in if present)
 
 
 @dataclass(frozen=True)
 class Principal:
+    raw_key: str
     key_id: str
-    scopes: Set[str]
-    is_admin: bool = False
+    scopes: FrozenSet[str]
 
 
-def _parse_scoped_keys_env() -> dict[str, Principal]:
-    raw = (os.getenv("FG_API_KEYS") or os.getenv("FG_SCOPED_KEYS") or "").strip()
-    principals: dict[str, Principal] = {}
+def _key_id(k: str) -> str:
+    return (k or "")[:12]
 
-    if not raw:
-        return principals
 
-    entries = [e.strip() for e in raw.split(";") if e.strip()]
-    for entry in entries:
-        # "<key>|scope1,scope2"
-        if "|" not in entry:
-            # No scopes segment -> treat as invalid (fail closed)
-            log.warning("Ignoring invalid FG_API_KEYS entry (missing '|'): %r", entry)
-            continue
+def _parse_scoped_keys_env() -> Dict[str, Principal]:
+    principals: Dict[str, Principal] = {}
 
-        key, scopes_str = entry.split("|", 1)
-        key = key.strip()
-        scopes = {s.strip() for s in scopes_str.split(",") if s.strip()}
+    # Primary scoped keys
+    raw = (os.getenv("FG_API_KEYS") or "").strip()
+    if raw:
+        for entry in raw.split(";"):
+            entry = entry.strip()
+            if not entry:
+                continue
+            if "|" not in entry:
+                # If someone fat-fingers the format, ignore the entry (and log it)
+                log.warning("FG_API_KEYS entry missing '|': %r", entry)
+                continue
+            key, scope_str = entry.split("|", 1)
+            key = key.strip()
+            if not key:
+                continue
+            scopes = frozenset(s.strip() for s in scope_str.split(",") if s.strip())
+            principals[key] = Principal(raw_key=key, key_id=_key_id(key), scopes=scopes)
 
-        if not key:
-            log.warning("Ignoring invalid FG_API_KEYS entry (empty key): %r", entry)
-            continue
-
-        principal = Principal(
-            key_id=key,
-            scopes=scopes,
-            is_admin=key.startswith("ADMIN_"),
+    # Legacy single key fallback
+    legacy = (os.getenv("FG_API_KEY") or "").strip()
+    if legacy and legacy not in principals:
+        # Give it broad scopes so old setups keep working
+        principals[legacy] = Principal(
+            raw_key=legacy,
+            key_id=_key_id(legacy),
+            scopes=frozenset({"decisions:read", "defend:write", "ingest:write"}),
         )
-        principals[key] = principal
-        log.info("principal=%s scopes=%s", principal.key_id, sorted(principal.scopes))
+
+    # Optional explicit keys (helpful for dev)
+    for env_name, default_scopes in [
+        ("FG_ADMIN_KEY", frozenset({"decisions:read", "defend:write", "ingest:write"})),
+        ("FG_AGENT_KEY", frozenset({"decisions:read", "ingest:write"})),
+    ]:
+        k = (os.getenv(env_name) or "").strip()
+        if k and k not in principals:
+            principals[k] = Principal(raw_key=k, key_id=_key_id(k), scopes=default_scopes)
+
+    # Log safely (no raw keys)
+    for p in principals.values():
+        log.info("auth principal=%s scopes=%s", p.key_id, sorted(p.scopes))
 
     return principals
 
 
-# Parse once at import for speed; you can restart container to reload env.
-_PRINCIPALS = _parse_scoped_keys_env()
+_PRINCIPALS: Dict[str, Principal] = _parse_scoped_keys_env()
 
 
-def _global_admin_key() -> Optional[str]:
-    # Backwards compat + easy MVP admin
-    return (
-        (os.getenv("FG_ADMIN_KEY") or "").strip()
-        or (os.getenv("FG_API_KEY") or "").strip()
-    ) or None
-
-
-async def verify_api_key(api_key: str | None = Depends(API_KEY_HEADER)) -> Principal:
+async def verify_api_key(api_key: Optional[str] = Security(API_KEY_HEADER)) -> Principal:
     if not api_key:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Missing API key")
+        raise HTTPException(status_code=401, detail="Missing API key")
 
-    # Global admin key: treat as admin with wildcard behavior (MVP)
-    gk = _global_admin_key()
-    if gk and api_key == gk:
-        return Principal(key_id=api_key, scopes=set(["*"]), is_admin=True)
+    p = _PRINCIPALS.get(api_key)
+    if not p:
+        raise HTTPException(status_code=403, detail="Invalid API key")
 
-    principal = _PRINCIPALS.get(api_key)
-    if principal is None:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Invalid API key")
-
-    return principal
-
-
-def _has_scope(p: Principal, scope: str) -> bool:
-    if p.is_admin:
-        return True
-    if "*" in p.scopes:
-        return True
-    return scope in p.scopes
+    return p
 
 
 def require_scope(scope: str) -> Callable:
     async def _dep(p: Principal = Depends(verify_api_key)) -> Principal:
-        if not _has_scope(p, scope):
-            raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail=f"Missing scope: {scope}")
+        if scope not in p.scopes:
+            raise HTTPException(status_code=403, detail=f"Missing scope: {scope}")
         return p
-    return _dep
 
-
-def require_any_scope(*scopes: str) -> Callable:
-    needed = [s for s in scopes if s]
-    async def _dep(p: Principal = Depends(verify_api_key)) -> Principal:
-        if p.is_admin or "*" in p.scopes:
-            return p
-        for s in needed:
-            if s in p.scopes:
-                return p
-        raise HTTPException(
-            status_code=HTTP_403_FORBIDDEN,
-            detail=f"Missing scope: one of {', '.join(needed)}",
-        )
     return _dep
