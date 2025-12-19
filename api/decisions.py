@@ -1,30 +1,24 @@
+# api/decisions.py
 from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_scope, verify_api_key
+from api.auth_scopes import verify_api_key
 from api.db import get_db
 from api.db_models import DecisionRecord
-from api.ratelimit import rate_limit_guard
 
 log = logging.getLogger("frostgate.decisions")
 
-router = APIRouter(
-    prefix="/decisions",
-    tags=["decisions"],
-    dependencies=[
-        Depends(verify_api_key),
-        Depends(require_scope("decisions:read")),
-        Depends(rate_limit_guard),
-    ],
-)
+router = APIRouter(prefix="/decisions", tags=["decisions"])
+
 
 # -------------------------
 # Helpers
@@ -33,18 +27,29 @@ router = APIRouter(
 def _iso(dt: Any) -> Optional[str]:
     if dt is None:
         return None
+    if isinstance(dt, datetime):
+        try:
+            return dt.isoformat()
+        except Exception:
+            return str(dt)
     try:
-        return dt.isoformat()
-    except Exception:
         return str(dt)
+    except Exception:
+        return None
 
-def _loads_maybe(s: Optional[str]) -> Any:
+
+def _loads_json_text(s: Optional[str]) -> Any:
+    """
+    Your DB stores JSON fields as TEXT (request_json/response_json/rules_triggered_json).
+    This safely parses JSON if possible, otherwise returns the raw string.
+    """
     if not s:
         return None
     try:
         return json.loads(s)
     except Exception:
-        return s  # keep raw string if it's not valid JSON
+        return s
+
 
 # -------------------------
 # Response Models
@@ -83,27 +88,42 @@ class DecisionsPage(BaseModel):
 # Routes
 # -------------------------
 
-@router.get("", response_model=DecisionsPage)
+@router.get(
+    "",
+    response_model=DecisionsPage,
+    dependencies=[Depends(verify_api_key)],
+)
 def list_decisions(
     db: Session = Depends(get_db),
-    tenant_id: Optional[str] = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
-    include_raw: bool = Query(default=False),
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0, le=200000),
+    include_raw: bool = Query(False, description="Include request/response JSON blobs (slower)"),
+    tenant_id: Optional[str] = Query(None, min_length=1),
+    event_type: Optional[str] = Query(None, min_length=1),
+    threat_level: Optional[str] = Query(None, min_length=1),
 ) -> DecisionsPage:
     try:
-        log.info("decisions.list start tenant_id=%s limit=%s offset=%s include_raw=%s", tenant_id, limit, offset, include_raw)
-
-        # total count (fast and boring)
-        count_stmt = select(func.count()).select_from(DecisionRecord)
+        # Build WHERE clauses once
+        where = []
         if tenant_id:
-            count_stmt = count_stmt.where(DecisionRecord.tenant_id == tenant_id)
+            where.append(DecisionRecord.tenant_id == tenant_id)
+        if event_type:
+            where.append(DecisionRecord.event_type == event_type)
+        if threat_level:
+            where.append(DecisionRecord.threat_level == threat_level)
+
+        # Total count
+        count_stmt = select(func.count()).select_from(DecisionRecord)
+        if where:
+            for w in where:
+                count_stmt = count_stmt.where(w)
         total = int(db.execute(count_stmt).scalar_one())
 
-        # page items
+        # Page rows
         stmt = select(DecisionRecord)
-        if tenant_id:
-            stmt = stmt.where(DecisionRecord.tenant_id == tenant_id)
+        if where:
+            for w in where:
+                stmt = stmt.where(w)
 
         stmt = (
             stmt.order_by(desc(DecisionRecord.created_at), desc(DecisionRecord.id))
@@ -120,37 +140,39 @@ def list_decisions(
                 created_at=_iso(getattr(r, "created_at", None)),
                 tenant_id=r.tenant_id,
                 source=r.source,
-                event_id=r.event_id,
+                event_id=str(r.event_id),
                 event_type=r.event_type,
                 threat_level=r.threat_level,
-                anomaly_score=float(r.anomaly_score or 0.0),
-                ai_adversarial_score=float(r.ai_adversarial_score or 0.0),
-                pq_fallback=bool(r.pq_fallback),
-                rules_triggered=_loads_maybe(getattr(r, "rules_triggered_json", None)),
+                anomaly_score=float(getattr(r, "anomaly_score", 0.0) or 0.0),
+                ai_adversarial_score=float(getattr(r, "ai_adversarial_score", 0.0) or 0.0),
+                pq_fallback=bool(getattr(r, "pq_fallback", False)),
+                rules_triggered=_loads_json_text(getattr(r, "rules_triggered_json", None)),
                 explain_summary=getattr(r, "explain_summary", None),
                 latency_ms=int(getattr(r, "latency_ms", 0) or 0),
             )
 
             if include_raw:
-                out.request = _loads_maybe(getattr(r, "request_json", None))
-                out.response = _loads_maybe(getattr(r, "response_json", None))
+                out.request = _loads_json_text(getattr(r, "request_json", None))
+                out.response = _loads_json_text(getattr(r, "response_json", None))
 
             items.append(out)
 
-        log.info("decisions.list ok total=%s returned=%s", total, len(items))
         return DecisionsPage(items=items, limit=limit, offset=offset, total=total)
 
     except Exception:
         log.exception("decisions.list FAILED")
-        # If this throws, it's a server bug. We want the stack trace in logs.
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
-@router.get("/{decision_id}", response_model=DecisionOut)
+@router.get(
+    "/{decision_id}",
+    response_model=DecisionOut,
+    dependencies=[Depends(verify_api_key)],
+)
 def get_decision(
     decision_id: int,
     db: Session = Depends(get_db),
-    include_raw: bool = Query(default=True),
+    include_raw: bool = Query(True, description="Include request/response JSON blobs"),
 ) -> DecisionOut:
     try:
         r = db.get(DecisionRecord, decision_id)
@@ -162,20 +184,20 @@ def get_decision(
             created_at=_iso(getattr(r, "created_at", None)),
             tenant_id=r.tenant_id,
             source=r.source,
-            event_id=r.event_id,
+            event_id=str(r.event_id),
             event_type=r.event_type,
             threat_level=r.threat_level,
-            anomaly_score=float(r.anomaly_score or 0.0),
-            ai_adversarial_score=float(r.ai_adversarial_score or 0.0),
-            pq_fallback=bool(r.pq_fallback),
-            rules_triggered=_loads_maybe(getattr(r, "rules_triggered_json", None)),
+            anomaly_score=float(getattr(r, "anomaly_score", 0.0) or 0.0),
+            ai_adversarial_score=float(getattr(r, "ai_adversarial_score", 0.0) or 0.0),
+            pq_fallback=bool(getattr(r, "pq_fallback", False)),
+            rules_triggered=_loads_json_text(getattr(r, "rules_triggered_json", None)),
             explain_summary=getattr(r, "explain_summary", None),
             latency_ms=int(getattr(r, "latency_ms", 0) or 0),
         )
 
         if include_raw:
-            out.request = _loads_maybe(getattr(r, "request_json", None))
-            out.response = _loads_maybe(getattr(r, "response_json", None))
+            out.request = _loads_json_text(getattr(r, "request_json", None))
+            out.response = _loads_json_text(getattr(r, "response_json", None))
 
         return out
 

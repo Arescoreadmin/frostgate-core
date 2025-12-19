@@ -6,7 +6,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any, List, Literal, Optional, Tuple
+from typing import Any, Iterable, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -30,14 +30,28 @@ router = APIRouter(
     ],
 )
 
-# ---------- Models ----------
+# ---------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------
 
 
 class TelemetryInput(BaseModel):
-    source: str = Field(..., description="Telemetry source identifier (e.g., edge gateway id)")
+    """
+    Backward compatible:
+      - Old clients: {tenant_id, source, timestamp, payload:{...}}
+      - New clients: {tenant_id, source, timestamp, event_type:"...", event:{...}}
+      - Also supports event_type inside payload as payload.event_type
+    """
+    source: str = Field(..., description="Telemetry source identifier")
     tenant_id: str = Field(..., description="Tenant identifier")
     timestamp: datetime = Field(..., description="Event timestamp (UTC, ISO8601)")
+
+    # Old path
     payload: dict[str, Any] = Field(default_factory=dict, description="Raw telemetry payload")
+
+    # Newer shape (optional)
+    event_type: Optional[str] = Field(default=None, description="Top-level event type")
+    event: Optional[dict[str, Any]] = Field(default=None, description="Top-level event body")
 
 
 class MitigationAction(BaseModel):
@@ -67,7 +81,9 @@ class DefendResponse(BaseModel):
     event_id: str
 
 
-# ---------- Helpers ----------
+# ---------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------
 
 
 def _to_utc(dt: datetime) -> datetime:
@@ -77,30 +93,45 @@ def _to_utc(dt: datetime) -> datetime:
 
 
 def _safe_dump(obj: Any) -> Any:
-    """
-    Pydantic v2: model_dump(mode="json") converts datetime -> ISO strings, etc.
-    Also recursively handles nested pydantic models if any sneak in.
-    """
+    # Pydantic v2-safe: datetime -> ISO string, etc.
     if hasattr(obj, "model_dump"):
         return obj.model_dump(mode="json")
     return obj
 
 
 def _canonical_json(obj: Any) -> str:
-    """
-    Canonical JSON for logging/debugging and event_id construction.
-    Must not explode on datetime.
-    """
     return json.dumps(_safe_dump(obj), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def _normalize_event_type(payload: dict[str, Any]) -> str:
-    et = (payload or {}).get("event_type")
-    if isinstance(et, str):
-        et = et.strip()
-        if et:
-            return et
-    return "unknown"
+def _coerce_event_type(req: TelemetryInput) -> str:
+    """
+    Never lose event_type again. Priority:
+      1) top-level req.event_type
+      2) req.payload.event_type
+      3) req.event.event_type
+      4) unknown
+    """
+    et = req.event_type
+    if not et and isinstance(req.payload, dict):
+        et = req.payload.get("event_type")
+    if not et and isinstance(req.event, dict):
+        et = req.event.get("event_type")
+
+    et = (et or "").strip()
+    return et or "unknown"
+
+
+def _coerce_event_payload(req: TelemetryInput) -> dict[str, Any]:
+    """
+    Normalize data for scoring logic:
+      - If top-level `event` exists, that's the event body.
+      - Else, use `payload` as the event body.
+    """
+    if isinstance(req.event, dict) and req.event:
+        return dict(req.event)
+    if isinstance(req.payload, dict) and req.payload:
+        return dict(req.payload)
+    return {}
 
 
 def _normalize_ip(payload: dict[str, Any]) -> Optional[str]:
@@ -118,7 +149,13 @@ def _normalize_ip(payload: dict[str, Any]) -> Optional[str]:
 
 
 def _normalize_failed_auths(payload: dict[str, Any]) -> int:
-    raw = payload.get("failed_auths") or payload.get("fail_count") or payload.get("failures") or 0
+    raw = (
+        payload.get("failed_auths")
+        or payload.get("fail_count")
+        or payload.get("failures")
+        or payload.get("attempts")
+        or 0
+    )
     try:
         return int(raw)
     except Exception:
@@ -126,10 +163,15 @@ def _normalize_failed_auths(payload: dict[str, Any]) -> int:
 
 
 def _event_id(req: TelemetryInput) -> str:
-    # Deterministic ID based on tenant/source/timestamp/payload
+    """
+    Deterministic ID based on tenant/source/timestamp + normalized event_type + normalized payload.
+    Important: include event_type, otherwise different event_types could collide.
+    """
     ts = _to_utc(req.timestamp).isoformat().replace("+00:00", "Z")
-    payload = req.payload or {}
-    raw = f"{req.tenant_id}|{req.source}|{ts}|{_canonical_json(payload)}"
+    et = _coerce_event_type(req)
+    body = _coerce_event_payload(req)
+
+    raw = f"{req.tenant_id}|{req.source}|{ts}|{et}|{_canonical_json(body)}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -144,7 +186,9 @@ def _clock_drift_ms(event_ts: datetime) -> int:
     return 0 if abs(age_ms) > stale_ms else age_ms
 
 
-# ---------- Scoring ----------
+# ---------------------------------------------------------------------
+# Scoring
+# ---------------------------------------------------------------------
 
 RULE_SCORES: dict[str, int] = {
     "rule:ssh_bruteforce": 90,
@@ -162,26 +206,24 @@ def _threat_from_score(score: int) -> Literal["none", "low", "medium", "high"]:
     return "none"
 
 
-def evaluate(
-    req: TelemetryInput,
-) -> Tuple[
+def evaluate(req: TelemetryInput) -> Tuple[
     Literal["none", "low", "medium", "high"],
     list[str],
     list[MitigationAction],
     float,
     int,
 ]:
-    payload = req.payload or {}
-    event_type = _normalize_event_type(payload)
+    et = _coerce_event_type(req)
+    body = _coerce_event_payload(req)
 
-    failed_auths = _normalize_failed_auths(payload)
-    src_ip = _normalize_ip(payload)
+    failed_auths = _normalize_failed_auths(body)
+    src_ip = _normalize_ip(body)
 
     rules_triggered: list[str] = []
     mitigations: list[MitigationAction] = []
     anomaly_score = 0.1
 
-    if event_type in ("auth", "auth.bruteforce") and failed_auths >= 5 and src_ip:
+    if et in ("auth", "auth.bruteforce") and failed_auths >= 5 and src_ip:
         rules_triggered.append("rule:ssh_bruteforce")
         mitigations.append(
             MitigationAction(
@@ -200,11 +242,18 @@ def evaluate(
     return threat_level, rules_triggered, mitigations, anomaly_score, score
 
 
-# ---------- Route ----------
+# ---------------------------------------------------------------------
+# Route
+# ---------------------------------------------------------------------
+
 
 @router.post("", response_model=DefendResponse)
 async def defend(request: TelemetryInput, db: Session = Depends(get_db)) -> DefendResponse:
     start = time.perf_counter()
+
+    # Normalize early so logs + DB + response all match
+    safe_event_type = _coerce_event_type(request)
+    safe_event_body = _coerce_event_payload(request)
 
     eid = _event_id(request)
     threat_level, rules_triggered, mitigations, anomaly_score, score = evaluate(request)
@@ -233,11 +282,9 @@ async def defend(request: TelemetryInput, db: Session = Depends(get_db)) -> Defe
         event_id=eid,
     )
 
-    payload = request.payload or {}
-    safe_event_type = _normalize_event_type(payload)
-
     debug = os.getenv("FG_DEBUG_DECISIONS", "false").lower() in ("1", "true", "yes", "on")
 
+    # Persist (best effort). Never crash the endpoint for DB issues in MVP mode.
     try:
         record = DecisionRecord.from_request_and_response(
             tenant_id=request.tenant_id,
@@ -251,13 +298,16 @@ async def defend(request: TelemetryInput, db: Session = Depends(get_db)) -> Defe
             rules_triggered=decision.explain.rules_triggered,
             explain_summary=decision.explain.summary,
             latency_ms=int(latency_ms or 0),
-            # IMPORTANT: json mode so datetime is serializable
-            request_obj=request.model_dump(mode="json"),
+            request_obj={
+                "tenant_id": request.tenant_id,
+                "source": request.source,
+                "timestamp": _to_utc(request.timestamp).isoformat().replace("+00:00", "Z"),
+                "event_type": safe_event_type,
+                "event": safe_event_body,
+            },
             response_obj=decision.model_dump(mode="json"),
         )
         db.add(record)
-
-        # force write now (fail here, not later)
         db.flush()
         db.commit()
 
@@ -288,7 +338,6 @@ async def defend(request: TelemetryInput, db: Session = Depends(get_db)) -> Defe
         )
 
         if debug:
-            # Safe: json-mode handles datetime
             log.error("DEBUG_DECISION request=%s", _canonical_json(request))
             log.error("DEBUG_DECISION response=%s", _canonical_json(decision))
             log.error("DEBUG_DECISION exception=%r", e)

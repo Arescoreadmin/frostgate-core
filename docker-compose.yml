@@ -12,6 +12,8 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Production note: do NOT publish 5432 unless you truly need host access.
+    # If you need it locally, keep this. If not, remove it.
     ports:
       - "5432:5432"
     env_file:
@@ -50,12 +52,12 @@ services:
       FG_DEBUG: ${FG_DEBUG:-false}
       FG_LOG_LEVEL: ${FG_LOG_LEVEL:-info}
 
-      # DB/Redis
-      FG_DB_URL: ${FG_DB_URL:-postgresql+psycopg://${POSTGRES_USER:-fg_user}:${POSTGRES_PASSWORD:-STRONG_PASSWORD}@postgres:5432/${POSTGRES_DB:-frostgate}}
-      FG_REDIS_URL: ${FG_REDIS_URL:-redis://redis:6379/0}
+      # API keys come from Docker secret file
+      FG_API_KEYS_FILE: /run/secrets/fg_api_keys
 
-      # Auth scopes
-      FG_API_KEYS: ${FG_API_KEYS}
+      # DB/Redis
+      FG_DB_URL: postgresql+psycopg://${POSTGRES_USER:-fg_user}:${POSTGRES_PASSWORD:-STRONG_PASSWORD}@postgres:5432/${POSTGRES_DB:-frostgate}
+      FG_REDIS_URL: ${FG_REDIS_URL:-redis://redis:6379/0}
 
       # Rate limiting
       FG_RL_ENABLED: ${FG_RL_ENABLED:-true}
@@ -68,16 +70,22 @@ services:
       FG_RL_ALLOW_BYPASS_IN_PROD: ${FG_RL_ALLOW_BYPASS_IN_PROD:-false}
       FG_RL_FAIL_OPEN: ${FG_RL_FAIL_OPEN:-false}
 
+      # Back-compat fallback (optional): if your app *only* supports FG_API_KEYS,
+      # uncomment this and accept that it leaks into compose config outputs.
+      # FG_API_KEYS: ${FG_API_KEYS:-}
+
+    secrets:
+      - fg_api_keys
+
     volumes:
       - ./state:/app/state
 
-    # ONE healthcheck. Not two. Humans love duplicating keys for sport.
     healthcheck:
-     test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=1).read()\""]
-     interval: 5s
-     timeout: 2s
-     retries: 30
-     start_period: 10s
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=1).read()\""]
+      interval: 5s
+      timeout: 2s
+      retries: 30
+      start_period: 10s
 
   frostgate-agent:
     profiles: ["agent"]
@@ -89,14 +97,21 @@ services:
     depends_on:
       frostgate-core:
         condition: service_healthy
-    env_file:
-      - .env
+
+    # Give agent the same secret (if the agent ever needs to validate locally)
+    secrets:
+      - fg_api_keys
+
     environment:
-      FG_CORE_BASE_URL: ${FG_CORE_BASE_URL:-http://frostgate-core:8080}
-      FG_AGENT_API_KEY: ${FG_AGENT_API_KEY:-}
-      FG_AGENT_TENANT_ID: ${FG_AGENT_TENANT_ID:-local}
-      FG_AGENT_SOURCE: ${FG_AGENT_SOURCE:-agent}
-      FG_AGENT_INTERVAL_SEC: ${FG_AGENT_INTERVAL_SEC:-10}
+     FG_API_KEY: ${FG_AGENT_API_KEY}
+     FG_CORE_BASE_URL: ${FG_CORE_BASE_URL:-http://frostgate-core:8080}
+     FG_AGENT_TENANT_ID: ${FG_AGENT_TENANT_ID:-local}
+     FG_AGENT_SOURCE: ${FG_AGENT_SOURCE:-agent}
+     FG_AGENT_INTERVAL_SEC: ${FG_AGENT_INTERVAL_SEC:-10}
 
 volumes:
   fg_pgdata:
+
+secrets:
+  fg_api_keys:
+    file: ./secrets/fg_api_keys.txt
