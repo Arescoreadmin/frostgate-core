@@ -36,14 +36,14 @@ WORKDIR /app
 
 # Create unprivileged user
 RUN useradd -m frostgate
-USER frostgate
-
 # Copy installed deps from builder
 COPY --from=builder /install /usr/local
 
 # Copy app code
 COPY . /app
-
+RUN mkdir -p /var/lib/frostgate/pycache /var/lib/frostgate/state /var/lib/frostgate/agent_queue \
+ && chown -R frostgate:frostgate /var/lib/frostgate
+ENV PYTHONPYCACHEPREFIX=/var/lib/frostgate/pycache
 # Default envs; override in real deployments
 ENV FROSTGATE_ENV=prod \
     FROSTGATE_ENFORCEMENT_MODE=block \
@@ -57,3 +57,5 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD \
 
 # Use uvicorn as the entrypoint
 CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+
+USER frostgate

@@ -1,5 +1,35 @@
 from __future__ import annotations
 
+def _to_utc(dt):
+    """
+    Accept datetime OR ISO-8601 string and normalize to timezone-aware UTC datetime.
+    Handles trailing 'Z' and naive datetimes.
+    """
+    from datetime import datetime, timezone
+
+    if dt is None:
+        return datetime.now(timezone.utc)
+
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    if isinstance(dt, str):
+        s = dt.strip()
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(s)
+        except Exception:
+            return datetime.now(timezone.utc)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+
+    return datetime.now(timezone.utc)
+
+
 import hashlib
 import json
 import logging
@@ -12,11 +42,16 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Any, Dict, Optional
 
-from api.auth_scopes import require_scope, verify_api_key
+from api.auth_scopes import require_scopes, verify_api_key
 from api.db import get_db
 from api.db_models import DecisionRecord
 from api.ratelimit import rate_limit_guard
+
+from api.schemas import TelemetryInput
+
 
 log = logging.getLogger("frostgate.defend")
 
@@ -25,7 +60,7 @@ router = APIRouter(
     tags=["defend"],
     dependencies=[
         Depends(verify_api_key),
-        Depends(require_scope("defend:write")),
+        Depends(require_scopes("defend:write")),
         Depends(rate_limit_guard),
     ],
 )
@@ -35,7 +70,19 @@ router = APIRouter(
 # ---------------------------------------------------------------------
 
 
-class TelemetryInput(BaseModel):
+
+class DefendRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    source: str
+    tenant_id: str
+    timestamp: str
+    classification: Optional[str] = None
+    persona: Optional[str] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class LegacyTelemetryInput(BaseModel):
     """
     Backward compatible:
       - Old clients: {tenant_id, source, timestamp, payload:{...}}
@@ -343,3 +390,9 @@ async def defend(request: TelemetryInput, db: Session = Depends(get_db)) -> Defe
             log.error("DEBUG_DECISION exception=%r", e)
 
     return decision
+
+# Patched: ensure doctrine always sees a boolean
+try:
+    explain["disruption_limited"] = bool(explain.get("disruption_limited", False))
+except Exception:
+    pass

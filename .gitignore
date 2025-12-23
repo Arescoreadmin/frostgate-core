@@ -83,3 +83,15 @@ state/
 .env
 .env.*
 state/
+
+# junk files accidentally created by bad paste/output redirection
+=
+CACHED
+exporting
+importing
+loading
+reading
+resolve
+resolving
+sending
+transferring

@@ -22,6 +22,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-fg_user}
       POSTGRES_DB: ${POSTGRES_DB:-frostgate}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-STRONG_PASSWORD}
+      FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
+      FG_STATE_DIR: /var/lib/frostgate/state
+      FG_AGENT_QUEUE_DIR: /var/lib/frostgate/agent_queue
+      FG_PYCACHE_DIR: /var/lib/frostgate/pycache
     volumes:
       - fg_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -42,7 +46,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["sh", "-lc", "python -m uvicorn api.main:app --host 0.0.0.0 --port 8080"]
+    command: ["uvicorn","api.main:app","--host","0.0.0.0","--port","8080","--no-access-log"]
     ports:
       - "18080:8080"
     env_file:
@@ -51,7 +55,18 @@ services:
       FG_ENV: ${FG_ENV:-prod}
       FG_DEBUG: ${FG_DEBUG:-false}
       FG_LOG_LEVEL: ${FG_LOG_LEVEL:-info}
+      FG_STATE_DIR: /var/lib/frostgate/state
+      FG_AGENT_QUEUE_DIR: /var/lib/frostgate/agent_queue
+      FG_PYCACHE_DIR: /var/lib/frostgate/pycache
 
+
+      # Auth safety rail: allow env/file keys for MVP. Flip to false when DB keys are seeded.
+      FG_AUTH_ALLOW_FALLBACK: ${FG_AUTH_ALLOW_FALLBACK:-true}
+      
+      FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
+      FG_DEFEND_LOG_EVERY: 200
+
+      
       # API keys come from Docker secret file
       FG_API_KEYS_FILE: /run/secrets/fg_api_keys
 
@@ -103,11 +118,16 @@ services:
       - fg_api_keys
 
     environment:
-     FG_API_KEY: ${FG_AGENT_API_KEY}
-     FG_CORE_BASE_URL: ${FG_CORE_BASE_URL:-http://frostgate-core:8080}
-     FG_AGENT_TENANT_ID: ${FG_AGENT_TENANT_ID:-local}
-     FG_AGENT_SOURCE: ${FG_AGENT_SOURCE:-agent}
-     FG_AGENT_INTERVAL_SEC: ${FG_AGENT_INTERVAL_SEC:-10}
+     FG_AGENT_TENANT_ID: t1
+     FG_AGENT_SOURCE: agent
+     FG_CORE_BASE_URL: http://frostgate-core:8080
+     FG_AGENT_INTERVAL_SEC: 60
+     FG_AGENT_API_KEY: ${FG_AGENT_API_KEY:-...}
+     FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
+     FG_AGENT_LOG_EVERY: 30
+     FG_STATE_DIR: /var/lib/frostgate/state
+     FG_AGENT_QUEUE_DIR: /var/lib/frostgate/agent_queue
+     FG_PYCACHE_DIR: /var/lib/frostgate/pycache
 
 volumes:
   fg_pgdata:

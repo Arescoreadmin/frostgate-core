@@ -5,6 +5,9 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from api.schemas import TelemetryInput
+
+
 
 class ThreatLevel(str, Enum):
     LOW = "low"
@@ -61,7 +64,7 @@ class MitigationAction(BaseModel):
     meta: Optional[Dict[str, Any]] = None
 
 
-class TelemetryInput(BaseModel):
+class legacyTelemetryInput(BaseModel):
     source: str
     tenant_id: str
     timestamp: str  # keep as string; api.main parses it manually

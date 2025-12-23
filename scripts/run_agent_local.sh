@@ -12,7 +12,7 @@ fi
 FG_AGENT_KEY="$(grep ^FG_AGENT_KEY= .env | cut -d= -f2-)"
 export FG_AGENT_KEY
 export FG_CORE_URL="${FG_CORE_URL:-http://localhost:18080}"
-export FG_AGENT_QUEUE_DIR="${FG_AGENT_QUEUE_DIR:-./agent_queue}"
+export FG_AGENT_QUEUE_DIR="${FG_AGENT_QUEUE_DIR:-/var/lib/frostgate/agent_queue}"
 export FG_AGENT_SOURCE="${FG_AGENT_SOURCE:-edge1}"
 export FG_AGENT_TENANT_ID="${FG_AGENT_TENANT_ID:-t1}"
 

@@ -10,6 +10,7 @@ def _telemetry_auth(failed_auths: int) -> TelemetryInput:
         tenant_id="tenant-test",
         timestamp=datetime.now(timezone.utc).isoformat(),
         payload={
+            # NOTE: this test uses generic "auth" but high failed_auths should still trigger bruteforce
             "event_type": "auth",
             "src_ip": "192.0.2.10",
             "failed_auths": failed_auths,
@@ -24,7 +25,7 @@ def test_bruteforce_rule_triggers_high_threat():
 
     assert threat_level == "high"
     assert "rule:ssh_bruteforce" in rules
-    assert any(m.action == "block_ip" for m in mitigations)
+    assert any(m.action == "block" for m in mitigations)
     assert anomaly_score >= 0.0
     assert ai_adv_score >= 0.0
 

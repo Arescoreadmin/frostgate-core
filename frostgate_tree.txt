@@ -1,0 +1,341 @@
+.
+├── ./agent
+│   ├── ./agent/agent_main.py
+│   ├── ./agent/app
+│   │   ├── ./agent/app/agent_main.py
+│   │   ├── ./agent/app/core_client.py
+│   │   ├── ./agent/app/__init__.py
+│   │   ├── ./agent/app/main.py
+│   │   └── ./agent/app/scripts
+│   │       └── ./agent/app/scripts/create_api_key.py
+│   ├── ./agent/contracts
+│   │   └── ./agent/contracts/advisory.schema.json
+│   ├── ./agent/Dockerfile
+│   ├── ./agent/.env.bak.20251217_123748
+│   ├── ./agent/README.md
+│   └── ./agent/requirements.txt
+├── ./agent_queue
+│   └── ./agent_queue/sent
+│       ├── ./agent_queue/sent/019e9f4ae1772e276240660dc1e2e400bccfdf7dbc83de4500ceac357a0676a6.cc98419cc4.json
+│       ├── ./agent_queue/sent/01cfbd09a4e6cc6704fc8a8572b4be409639fb4f0b6f2137b4be208cc8673622.fc663148d7.json
+│       ├── ./agent_queue/sent/01ff86da010cb2e5697f081bbe1198017ab6f9d527a42502b37e1f6c9cc30a0c.b3cd352c6f.json
+│       ├── ./agent_queue/sent/0414cd64fe0781a31a5378cd7f38825105a1926065039af1d8de5b789fa29c9b.710ed6d3a3.json
+│       ├── ./agent_queue/sent/04f4391fd2ce500b9946a7500228d82971496262f7185d4cf5361b766e00b327.a931b10491.json
+│       ├── ./agent_queue/sent/05033e87837618983255c0eda28139cc91ac249057c905fe55bfaad3cdcbf612.0fcf6c6fef.json
+│       ├── ./agent_queue/sent/0601574e5772dd2e1859ebc643c142e02a3131c6fd78ed553d8a9fa58d240ddc.5d33e72f68.json
+│       ├── ./agent_queue/sent/0653bcdcedde91bbe68b6ec1ac94a6bd0608bb5497854157e3ae933d730e1184.7d07070bd5.json
+│       ├── ./agent_queue/sent/081915f4e8e74b7df79831b83249d65ff95bd6123475535fd0b1cb500fdd7a17.49356f4e20.json
+│       ├── ./agent_queue/sent/0884643aae41f4177a9990fe4a812d097113ebe8055e7f1d076050616bb2e6ff.14b1aa98db.json
+│       ├── ./agent_queue/sent/08acd4beeb451606e393f1604fed72f8690b6e10bf637d4aeeb9947afee9b808.eed47aaee4.json
+│       ├── ./agent_queue/sent/0a5941b01dac32b8542bef5579633f8dc6cd7b845cbe47d18e6219da032ceeaa.ce5b8d9b40.json
+│       ├── ./agent_queue/sent/0b5df3e73b26c9234bf9bfb69e5b71396e3647385b748984d7e0709d99b7fc2c.ff9888a282.json
+│       ├── ./agent_queue/sent/0d6b3c847c00891b0eba5a35f75213181e381de1cd283193569d56c25cda4f09.25c00da5bd.json
+│       ├── ./agent_queue/sent/0d8c8c3e3d430e564d10c312744840e24e1371b91689eeaec06ae7d3a3e67360.e755b66ae2.json
+│       ├── ./agent_queue/sent/0e5ac88d85796c5e361a49dcee906aa3477eb17f7a641d8aae84ec2c15bacefe.74082c6ade.json
+│       ├── ./agent_queue/sent/0ed933291f9a47d56f52e9677f92320668cd710296fc5d0261bac24f4ef11415.75b6d9cef0.json
+│       ├── ./agent_queue/sent/0f01539aca5c521bc26006c7fc0a097d76b2c4ee5bf60e8641b788f6d9805c03.e9c6cbca0d.json
+│       ├── ./agent_queue/sent/0fffbabfab5cf8ce7814e9b2d5c21eb36d2261f44c6a117fca8c045e7ed2f963.8dd5d39b3a.json
+│       ├── ./agent_queue/sent/10558260e94e21289567873fd60f515431763d57cdbf044d7be3b1ab75a9749a.01249cedc3.json
+│       ├── ./agent_queue/sent/124c6effdba8deb5d68b13a4462283aceafa835b9b5330f74cfd8df8899d7f9f.3fa5e1a085.json
+│       ├── ./agent_queue/sent/137a6873bda508130297960cd29aff6804bafa35df6243c5dd0d112e1453a2eb.6277036c01.json
+│       ├── ./agent_queue/sent/1702c5478877d8bfe0a4da3178da4bb52071ea0858d45459910a45d9ddeb34b1.f13198ce4c.json
+│       ├── ./agent_queue/sent/1791b204afdb739a2241998fd681223d7eec6c088b16b1472ece191ceab695d7.d5d8786b9d.json
+│       ├── ./agent_queue/sent/1a80eaa9096fc1bc119814d4d3be673f43104e421f318e82b046c32991be3fe3.c351a52e03.json
+│       ├── ./agent_queue/sent/22debe597b588abf1b84e247b1b5ecc246a976c48b05fe9ac8a794ca6d1ad9a8.9fe7bad97f.json
+│       ├── ./agent_queue/sent/2315b643d1b4e05d5e5545223127c7e1f0d15ed71e1eaf47c02909dab64c9af2.68351a8051.json
+│       ├── ./agent_queue/sent/26639ae45af16bc1e528986c68212a0dd6693c29001c7da0eab204fb3a3bebe5.008315d294.json
+│       ├── ./agent_queue/sent/2a29da1ed09410c4e8a5c2bc6986e35da6795f215d4d3ebd4ca49f6f5e444452.85934d8666.json
+│       ├── ./agent_queue/sent/2c35b51d06d2c9023db5eb6ac480ad086eca974e3010353783365d12e2ee4fb4.15ac36b065.json
+│       ├── ./agent_queue/sent/2cd50ccde4f1172701ae5fddbedb9e88ad89e87d78c04744d15603789bfe4c84.6c9e3c2f87.json
+│       ├── ./agent_queue/sent/2ce443a8672d731054f5f9d9f7a471a140b52a40afa5398badf8ad007d65486b.090a19c2dd.json
+│       ├── ./agent_queue/sent/2e35db8ce2519512d2f96f10eb22571b6d54f0ca44b87040b44b5be17d9f82d2.4e305fcb32.json
+│       ├── ./agent_queue/sent/2ed58d7812e3bf0940170d4e72dafa9ebf220606e13c1fe5d016f24936001e33.bacf4a0ab6.json
+│       ├── ./agent_queue/sent/302bca84baa428857f4bb6d3e98773fcb4a99ea32d785823df64b2c81e04f4f2.84fa22e9da.json
+│       ├── ./agent_queue/sent/30e0ee1b96d232e5cc6cca40a85adefde91704bfc3714a492fdcb7b7f00a5e04.6f118f2296.json
+│       ├── ./agent_queue/sent/31c1dae4b52f98582424ad8739dcd940a15c29a6a505891510a9d5b4cac2741b.5f84a47c0e.json
+│       ├── ./agent_queue/sent/32e45d55c3623d902c36b0c40f03afe9594638c1c08c708e1c3947d40b473369.145ddc4b7b.json
+│       ├── ./agent_queue/sent/357f9518e68467b0db0ad616acda641862778d491dd1e8ea81b4b5beec44a408.b9411fa7e2.json
+│       ├── ./agent_queue/sent/36e541e2a8c4812607cbaef9996f58c5818f71eea525e913181b96b03db4e7b1.dd8c4568c5.json
+│       ├── ./agent_queue/sent/3867a7c22293e257a716e230c3aeb63e1592e9ac9c99023261b60332bc0d9a3e.a01e5739da.json
+│       ├── ./agent_queue/sent/3888567961b806fd5c0e6f723291bfda20ea3bb899bd83ea8fb6cdae8633993f.136350b664.json
+│       ├── ./agent_queue/sent/3970cee063c900fb69ebbbc46f3012a15d16e0d5358a7598e7d82a4e69a61217.34bf3ce321.json
+│       ├── ./agent_queue/sent/3a435e272600022143991238628c5594a1299b044b4386a59a3b5f33f12d5181.76e0dacfd5.json
+│       ├── ./agent_queue/sent/3c140e22cda66cbaf61a9637ede4c14f1e5708384bb976a7d245b73b1ed571ce.5eede9d992.json
+│       ├── ./agent_queue/sent/3e05a374413bf5e12a8cc31730df23c22560e368102b6a43c48b7bcd779377dc.04d51e1b73.json
+│       ├── ./agent_queue/sent/3fcf8d6379031870066b5e4e1608288c4da7611655efcd78eeb64505acadc029.d1dd2ce6c9.json
+│       ├── ./agent_queue/sent/40586c3551f02e1ebbe242d4624261ca39eb15b5f4ebf43b8057b8c46743ba4b.5b64272b43.json
+│       ├── ./agent_queue/sent/409cf4af74097345165d197b2403ee91bfd88fcf929314b81d89a2e55c8ea7e9.ac88ff596f.json
+│       ├── ./agent_queue/sent/4300694d879e7425f7719ec86064b920fad927272efb38037d06b89fa950039e.43fd6f5901.json
+│       ├── ./agent_queue/sent/4374032fd0a90b5ca6f3c157515c6e0de8df9f193b2bff5bf4f92008e00a142e.2f3226c3bf.json
+│       ├── ./agent_queue/sent/4590b5e0692540344db9f912ab2af639b9f986c2f3a9ed57a41270b156428595.ab975d29e7.json
+│       ├── ./agent_queue/sent/4716a62d59b044d95ec4bbe983a1e1d2c094df68da780ff041ff3df197c84d6c.d96f972dcd.json
+│       ├── ./agent_queue/sent/4b0d623ce543db139f0b5ccf22997478f7279cab84310b6cdf20b862a391b2ae.4885cec4da.json
+│       ├── ./agent_queue/sent/4f9d5d21bcb04fdecb812323f8195f5700e9a74979a5af017eec163eac993b92.b40b64812d.json
+│       ├── ./agent_queue/sent/510a7a7fa13b562b5aa474e98d02dfb954a5fc2b883b9ed6ab91b59132ffc24c.91b4627583.json
+│       ├── ./agent_queue/sent/534d2c392ee8b667a718e60006597fb3e4d2888e896802d2141714b92713d6e7.711a8af9cf.json
+│       ├── ./agent_queue/sent/557d1b6e42bf6856e53d5f8dac0db3ab74f2bcd9271b6e471da0f32d091e247f.3ea846a756.json
+│       ├── ./agent_queue/sent/5589511c90e1fe4e08d00a13a8dd7a10946dd5e804ba1c512926b50884e683ce.5c868aad9c.json
+│       ├── ./agent_queue/sent/55b328b525f6df911884877ac7b76ffba4eb64c3fcc083dbfa8f5b7800c4e064.11f28dea1b.json
+│       ├── ./agent_queue/sent/55ddbe410ef621768726a3f4363871f5092d932291d2b83763212b9b1e4de75c.2d19c770d4.json
+│       ├── ./agent_queue/sent/56407367cd4fcfce3e06cc803b509645bf250da08745314b33a1e8dee648ae79.c29a07b3c7.json
+│       ├── ./agent_queue/sent/5860fb8d0e2bc05f8ec91c2bc1c5621005e33cfe5659dc2a9d0d11b4a58966ab.8ff5f8a920.json
+│       ├── ./agent_queue/sent/5930ac67c4c338c2012eca0d062a71948c0a183befc95ba8998d594dc7ca1dda.3b2b064b12.json
+│       ├── ./agent_queue/sent/599bbe5e911bf382e8b917b8a984175b8ef8b2c8eeabbf71e2928a753c15a8ce.23e9ad427d.json
+│       ├── ./agent_queue/sent/5a1e60f73a73fd271b87c7b907468887f48e51452e8ff01076d723ad45e1d5d8.16779e98fe.json
+│       ├── ./agent_queue/sent/5a2cdae314758aa778242f6a84c5e55308507d1a6c4b2299f63bdaa3778b32e0.5e4991252b.json
+│       ├── ./agent_queue/sent/5c24e1b2983653b602810407a6e5a095a5105c136b43764d2e37e4617e7e8c5d.4ff5a760f9.json
+│       ├── ./agent_queue/sent/5c39a9e9e7cc51113628eb31d274c1c15e22351a214c1731d97e94bb7028ed17.ca227e7594.json
+│       ├── ./agent_queue/sent/61815a3ed0ae8a1bbc94da2bc9aadc4b678714ae92cbb7120b5bc835e53f7ee2.934e63bb18.json
+│       ├── ./agent_queue/sent/635a8fced0a8cd6d754a199a2c6c29844628fb3a117f165a539fb899b4b1ad77.96ca7dc4fb.json
+│       ├── ./agent_queue/sent/63ce45acfb56d8912d846e50971aac69c5e989f68e5fe18d4d9cdd04109f9327.d41b518486.json
+│       ├── ./agent_queue/sent/641a2282c216bea7b7a1db6135c2126a8baeb5cc3de807fb3d53d513db126ff0.a6c4d3b1ac.json
+│       ├── ./agent_queue/sent/64c15214133e926264f8287bd67ec14c1a2661715af876bf884e14190a9afd83.926bcf4097.json
+│       ├── ./agent_queue/sent/64eef680074529aa8bdd1cd3a4b7a9662b885962f41ac7989d51d7f05f280886.c16f9a97b9.json
+│       ├── ./agent_queue/sent/6578b3d4495eb9d59dbb66a1b8b11e61c5971a74fec1c23dc33cf9b7227b984f.8d771236a0.json
+│       ├── ./agent_queue/sent/671b97b47e7eddc92302e7e4eb737196c89673b2697794a9d9fd29ec2460568e.e259cea7a4.json
+│       ├── ./agent_queue/sent/67c99c4dd580c860fd99179cb3b3ba48771ea02faa8027274e8fdd9540ba72d7.69bea6947c.json
+│       ├── ./agent_queue/sent/7013b1a09c82f0aa22ab220b74e945c3af8726c93f438826c9112ad517c8ec78.2f214c28cf.json
+│       ├── ./agent_queue/sent/73517779e52ff110060507914be69eb78e10f30e360010c01357d4374170cf0e.12e0e8652c.json
+│       ├── ./agent_queue/sent/73ff83bffa82612dd9f2a457f98aeb235825860d4d1a7d94756a1f2e42bbe267.95cf5404b3.json
+│       ├── ./agent_queue/sent/7404f3938f0bcdb5373be35ff6319cc4aa83dcd30279789c0438ab1fc8b436c0.cc0abf04b1.json
+│       ├── ./agent_queue/sent/769d4b666e355b5c7c803682ea00775bd935baf8ebbea677e7258cc5f3f8c012.a09e13555b.json
+│       ├── ./agent_queue/sent/77ddeafd166d41203c18ed53974d734718b2ddc79e2ecc095c166a3f386b4592.601528fa37.json
+│       ├── ./agent_queue/sent/7d80cc68c1239ea136dca3fa1ca9636190ee463efa0de84063f5e1b0fafb3ef2.960dcbe396.json
+│       ├── ./agent_queue/sent/7f7276a7d8f8a5be506caefdf51f0bbecc051765813aed82ff0cec8a32db1a4a.607c93a83d.json
+│       ├── ./agent_queue/sent/80ed9717fb6b8e9863785a628de6c6373ebb4557152b2ec75636754c0fe89e50.100c33aacd.json
+│       ├── ./agent_queue/sent/81297ff06e30b6bf12cd2427935369b93e68dcd78de67444e37f301675e7ef42.b670b1b223.json
+│       ├── ./agent_queue/sent/823794f03bddb0d7271f8b47bbbb6eb7a2177bff1b501af6e3414902f3cfbd74.925aa9b1c3.json
+│       ├── ./agent_queue/sent/82977c43e771aac57571fc037f1ce819f47e7b1dfe3699aa558025dc5a9a02e3.09dd542d7d.json
+│       ├── ./agent_queue/sent/82a4dc0ebba7fecd69c31b4ab3716ffdb78adb046f52cbe4b45a88684813cae1.e5dcdb8a70.json
+│       ├── ./agent_queue/sent/82ec15cf8c0d441477deb074a633bab57429d147f6f169525c1004a3219811f1.c7f5d61097.json
+│       ├── ./agent_queue/sent/83a19535d99e1b5d5550e20c4aa68d9b5c4a33eb6bb5770fa4ecb2e102876c81.8de9c49888.json
+│       ├── ./agent_queue/sent/85a15e87e937b728975d57fb5f73a7f93b4c02e5f1b1626dcdbf583ed6d854a4.e5bd81749a.json
+│       ├── ./agent_queue/sent/871e2dc129bdb2f02a44866d0018e17e5a8a228c2f10f8d086928cb9fad0fd38.58f38b2215.json
+│       ├── ./agent_queue/sent/899f2437b2b59dff49b608bda0c6f8cf8331b8b3c4811dd73c5180cac9aecb61.bec6104d0a.json
+│       ├── ./agent_queue/sent/8ad99e563a19bac70483906ad0c940a55fab5fa0c82ad1b72642639e5e5c0eba.3e3128aeae.json
+│       ├── ./agent_queue/sent/8af2ea56ae3e30eff3c86d2d85af275a8915f5c62a813dd95ecaf69ee0995f81.8d82e981c5.json
+│       ├── ./agent_queue/sent/8bb6408671a10f098a772d0830e2002beee86dd9e8463b485c8216e130082ee5.b5d66845fb.json
+│       ├── ./agent_queue/sent/8d78fea66a6e1ea79d41035a04f021959ec616dd3d7d78d646e49d817ab67395.207ebe1769.json
+│       ├── ./agent_queue/sent/92b46cac2ca0a985843c4a7c84b20e281b4d2cbd7ab5702f9b6c7525f25f895e.fec7d17f98.json
+│       ├── ./agent_queue/sent/9541d47262d991ad6035ab63741e03dea3656ace8e7fe6e8718f8ecba44ca30e.0f6f6f039f.json
+│       ├── ./agent_queue/sent/956c13a6621e28a7b66f22a2bdeec05aacfc947ff3dfb8915f0f1a41d1a53c4c.087963f135.json
+│       ├── ./agent_queue/sent/99015b7ad8c5fbab5eb62ff4a620572874892431a57e6024ab8b65a80ba474d9.f380de7dd8.json
+│       ├── ./agent_queue/sent/9aa34819b00ad0d0e9ecca0f07ee05585d6217fbe9922a43945aabd70cce1565.ffc825d344.json
+│       ├── ./agent_queue/sent/9b0b8c54b08e99cb4cc99fe500cad1f493acfeeeaf0fe1ece1326f132befad24.880dfb4934.json
+│       ├── ./agent_queue/sent/9c70e713a668ef0d76d383762d7703e8fb56812fd482d4e79c8c2eb223183139.5d22182355.json
+│       ├── ./agent_queue/sent/9d53b9fd26fdd928cf07ce6acb4ca0e89e21fc49e63ed3255f0ec40f3019486f.7b4b1032b4.json
+│       ├── ./agent_queue/sent/9f16349a2cb513a017c9a77f15b483771aaa4a103ef81761f356d68ed9884ccc.0f5361bdce.json
+│       ├── ./agent_queue/sent/9f35742fbf49b7d63ca2279b421fb3128f473372f736130c2fe6224d9f234366.85de522dd9.json
+│       ├── ./agent_queue/sent/a2697bdc56ab47c5f6d5a131da22d09111b2e22b4d960ba03237812aa07c25c8.ee2f06c0e3.json
+│       ├── ./agent_queue/sent/a49084184d5fc9b6a3c1ea6bbab1751fa689fb182e579e81ea83a59696e7dd6d.51de8b66b8.json
+│       ├── ./agent_queue/sent/a72020c2eacd4491ddfb51ee244a47bf1aed02ec72587961b0da9d80b0e7cbff.5e1e7aae6e.json
+│       ├── ./agent_queue/sent/a79aa2823848cbfa9ad71878886fd94aee5ba1204f8bbfc800ab9fae19107bf0.d66a6572a9.json
+│       ├── ./agent_queue/sent/a7b0a0cf28b052660ceb18a3db21745cc938fbb4e4542e4fa81d3b3ef80e6922.74e5cd6ff4.json
+│       ├── ./agent_queue/sent/abb05918fb9807bb3b692d37e5a92ad55fb3d561af948c3341878611cbdb0c9f.6b45d45c21.json
+│       ├── ./agent_queue/sent/abd01a6bf0d669bc4772bd80983e03f960c5622c994c5ec959ca6a81951d1ecf.1da322be24.json
+│       ├── ./agent_queue/sent/b1c89771492766341af6a4cfd98beebb539d33502e78470291c7f45220739d90.77f124558f.json
+│       ├── ./agent_queue/sent/b791d8005fa163550a9adae1fc3bb925d9e1085bc13d0a325aae3af32aa761d5.bb4d2d7050.json
+│       ├── ./agent_queue/sent/b8bd76fe89fbff8182106ca74d287b140bd0327976a3655c380549d9c084fa87.541d33ac12.json
+│       ├── ./agent_queue/sent/ba036d9bd51e99fd13e0ea6c5b8743fec441d6886f90503176c28b1d1b64e904.ff6c5854f0.json
+│       ├── ./agent_queue/sent/ba899f605dab5db463c78b58733e930232671ba2db48bb359ce666a1515b4b9a.312ec8f60a.json
+│       ├── ./agent_queue/sent/bb6900e32d490235437cadbd847d405a2ad7bce3c727f641749458e97dc90b41.9296dd6c36.json
+│       ├── ./agent_queue/sent/be4c90a50c00157b32cc7fd6afd2e9d8a149f3c3a62dbaf20bcd1b0e86789baf.58429e3811.json
+│       ├── ./agent_queue/sent/be7ee3d3207732d594565351b9033c4a96996a338df8373e393e46c30340fbbc.fa34f6a89b.json
+│       ├── ./agent_queue/sent/be93b651011f655d8dd9d5d6d689a6c2313d138437e62aa7a3d072ef3145ff00.52e76bcaa6.json
+│       ├── ./agent_queue/sent/bf352648b2218677d58b62e2f86a57c3c28ad0a5945debe355f5485ca7c2cc0d.df0e5409df.json
+│       ├── ./agent_queue/sent/bf9aa2d58837b6837f94f0153b2c6ff9d5c50c73f073308a0f136d83bc3e5fa7.e145487a20.json
+│       ├── ./agent_queue/sent/c5390e602e66966273c7d5640eff8915ac40d4f05d06a30a327e6a8fdc70798f.acf6267f2d.json
+│       ├── ./agent_queue/sent/c5d1826c257b474052e3e2d7fdfd6d8d992ef66309a73d04daabff481e32d996.3aafa33a9a.json
+│       ├── ./agent_queue/sent/c764f78ae569ac03ebd69cf3d24e6df7fbb8d035bf21afce263a2f73ec3255b2.70b4551d37.json
+│       ├── ./agent_queue/sent/cc7ffa3526682b4c00bf6999beaaecfd501daf3a38dbd7bb568df72ae7b550a5.608f706764.json
+│       ├── ./agent_queue/sent/cd1ec237441dd996e596e93b65acd729d3be0103b3ae7a233567c8ba385ef884.6f0f228117.json
+│       ├── ./agent_queue/sent/d13376606f30b5b33ff82f278adc424fe80503981464f2f27c705bede0a6b8f4.0e4b66a294.json
+│       ├── ./agent_queue/sent/d1d7aa504b3d33b0a27f42f819bdfe9e8bae367f6fb6c985837508568f2084f8.ce1d90df53.json
+│       ├── ./agent_queue/sent/d1ecd5974d35092d2697f628000dc713c03a377d66081369f3c89cbb6600da0a.578a4b35b3.json
+│       ├── ./agent_queue/sent/d320478338ecbeac04568cd34b2d3e97c009e4199cf2f048ba80b7a4d3ae085a.f3059cd229.json
+│       ├── ./agent_queue/sent/d34ce93e5e01806108782a3649560c36b9f46bc30636aa74a5442cee1e29cb56.45662fb1c8.json
+│       ├── ./agent_queue/sent/da03dc24d1c084b0e4eafab50ba6e27004a576f5b4aba6254341dfdcdb1d9d0b.91a54c69ca.json
+│       ├── ./agent_queue/sent/db0a419810cfd2c7aa1657e8155c4598e606ad9a038cc8bd7df0bd68a5c73010.98abaf616b.json
+│       ├── ./agent_queue/sent/e14daf3be90b28ca132015980bcb8dea9cffa10475e82f771ba2867bd235cb91.8e4360795d.json
+│       ├── ./agent_queue/sent/e1fbf5745d61710a52687c0832374018805222089ed1454c718b5be2b82d2220.9a2cb42d3e.json
+│       ├── ./agent_queue/sent/e5a7ee4cf1905eb6c83fe6e152edfad486627a54dafe224b94fd8edeffaa7f6e.0f14f9a332.json
+│       ├── ./agent_queue/sent/eb99eadddfadc014d6a0a7fcaed613c44820b145c6b9e97f2f2fe35d5b90afec.b76106af8e.json
+│       ├── ./agent_queue/sent/f211c0b9306ce5d1548d93007c6c0b1047dd34f62603a1767f3cb2bf00e56dc6.c3306840f1.json
+│       ├── ./agent_queue/sent/f4158bdede4ffce966abbe86920a4090796875fd6228bc9c0be97d2c4247e1b9.d293e330d9.json
+│       ├── ./agent_queue/sent/f724307606f7824fb33a3b05791dfb5baf47a0383985ea7c145b095b01ff7492.42e95a1a7f.json
+│       ├── ./agent_queue/sent/f76419a166a3a04be63bc12ef8c31350d501029ac3bb7608a6268798c740b9e9.a4ef9c334a.json
+│       ├── ./agent_queue/sent/f90fcbfb530ccbae725a5fc8242cdbe34425445b21114f3629758f729ded32c6.db0c8f2795.json
+│       ├── ./agent_queue/sent/f9125d6af0741f7d488f19fd53d4e2b18365efda49608dd87f36dd68ec0dfe1c.5eeccfc9b9.json
+│       ├── ./agent_queue/sent/f9edd9b3e8ed0abe70ddc5a3be75a403ec6d784a079ec0a575c19a94e1f50a92.34e4265e39.json
+│       ├── ./agent_queue/sent/fa4612453f696f1bd2423dd3dd1ec23baf176573dd686f24e37ff6e2284e2b31.b30f9be905.json
+│       └── ./agent_queue/sent/fe6c0bd68257d9b16a524a2834a34a24b870548c3691f04e3d4f794982f8b0f6.c89eff77ac.json
+├── ./api
+│   ├── ./api/auth.py
+│   ├── ./api/auth_scopes.py
+│   ├── ./api/config.py
+│   ├── ./api/db_models.py
+│   ├── ./api/db.py
+│   ├── ./api/db.py.bak.20251217_123748
+│   ├── ./api/decisions.py
+│   ├── ./api/defend.py
+│   ├── ./api/ingest.py
+│   ├── ./api/__init__.py
+│   ├── ./api/logging_config.py
+│   ├── ./api/main.py
+│   ├── ./api/main.py.save
+│   ├── ./api/metrics.py
+│   ├── ./api/models.py
+│   ├── ./api/persist.py
+│   ├── ./api/ratelimit.py
+│   ├── ./api/schemas.py
+│   ├── ./api/telemetry.py
+│   └── ./api/token_useage.py
+├── ./auth-settings.patch
+├── ./backend
+│   ├── ./backend/app
+│   │   ├── ./backend/app/api
+│   │   │   ├── ./backend/app/api/__init__.py
+│   │   │   └── ./backend/app/api/routes.py
+│   │   ├── ./backend/app/__init__.py
+│   │   ├── ./backend/app/main.py
+│   │   ├── ./backend/app/schemas.py
+│   │   └── ./backend/app/services
+│   │       ├── ./backend/app/services/__init__.py
+│   │       ├── ./backend/app/services/intel.py
+│   │       └── ./backend/app/services/missions.py
+│   ├── ./backend/pyproject.toml
+│   ├── ./backend/README.md
+│   └── ./backend/tests
+│       ├── ./backend/tests/conftest.py
+│       ├── ./backend/tests/test_health.py
+│       ├── ./backend/tests/test_intel.py
+│       └── ./backend/tests/test_missions.py
+├── ./deploy
+│   ├── ./deploy/charts
+│   │   └── ./deploy/charts/frostgate-core
+│   ├── ./deploy/frostgate-core
+│   │   ├── ./deploy/frostgate-core/Chart.yaml
+│   │   ├── ./deploy/frostgate-core/templates
+│   │   │   ├── ./deploy/frostgate-core/templates/configmap.yaml
+│   │   │   ├── ./deploy/frostgate-core/templates/deployment.yaml
+│   │   │   ├── ./deploy/frostgate-core/templates/_helpers.tpl
+│   │   │   ├── ./deploy/frostgate-core/templates/secret.yaml
+│   │   │   ├── ./deploy/frostgate-core/templates/serviceaccount.yaml
+│   │   │   └── ./deploy/frostgate-core/templates/service.yaml
+│   │   └── ./deploy/frostgate-core/values.yaml
+│   ├── ./deploy/helm
+│   │   └── ./deploy/helm/frostgatecore
+│   │       ├── ./deploy/helm/frostgatecore/chart.yaml
+│   │       ├── ./deploy/helm/frostgatecore/templates
+│   │       │   ├── ./deploy/helm/frostgatecore/templates/deployment.yaml
+│   │       │   └── ./deploy/helm/frostgatecore/templates/service.yaml
+│   │       └── ./deploy/helm/frostgatecore/values.yaml
+│   └── ./deploy/k8s
+│       └── ./deploy/k8s/dev
+│           ├── ./deploy/k8s/dev/core-service.yaml
+│           ├── ./deploy/k8s/dev/deployment.yaml
+│           ├── ./deploy/k8s/dev/kind-config.yaml
+│           └── ./deploy/k8s/dev/service.yaml
+├── ./docker-compose.yml
+├── ./docker-compose.yml.bak.20251217_123748
+├── ./Dockerfile
+├── ./.dockerignore
+├── ./docs
+│   └── ./docs/FrostGateCore_Buildout_vNext.md
+├── ./engine
+│   ├── ./engine/doctrine.py
+│   ├── ./engine/history.py
+│   ├── ./engine/__init__.py
+│   ├── ./engine/persona.py
+│   ├── ./engine/roe.py
+│   ├── ./engine/rules.py
+│   ├── ./engine/setting.py
+│   ├── ./engine/tied.py
+│   └── ./engine/types.py
+├── ./.env
+├── ./.env.bak.20251216_134046
+├── ./.env.bak.20251216_134129
+├── ./.env.bak.20251216_134543
+├── ./.env.bak.20251217_123748
+├── ./.env.dev
+├── ./.env.dev.bak.20251217_123748
+├── ./.env.example
+├── ./.env.example.bak.20251217_123748
+├── ./.env.prod
+├── ./.env.prod.bak.20251217_123748
+├── ./frostgate_tree.txt
+├── ./.github
+│   └── ./.github/workflows
+│       ├── ./.github/workflows/ci.yml
+│       ├── ./.github/workflows/docker-ci.yml
+│       └── ./.github/workflows/release-images.yml
+├── ./.gitignore
+├── ./jobs
+│   ├── ./jobs/chaos
+│   │   ├── ./jobs/chaos/__init__.py
+│   │   └── ./jobs/chaos/job.py
+│   ├── ./jobs/__init__.py
+│   ├── ./jobs/merkle_anchor
+│   │   ├── ./jobs/merkle_anchor/__init__.py
+│   │   └── ./jobs/merkle_anchor/job.py
+│   └── ./jobs/sim_validator
+│       ├── ./jobs/sim_validator/__init__.py
+│       └── ./jobs/sim_validator/job.py
+├── ./Makefile
+├── ./readme.md
+├── ./README.md
+├── ./requirements-dev.txt
+├── ./requirements.txt
+├── ./scripts
+│   ├── ./scripts/apply_decisions_indexes.py
+│   ├── ./scripts/auth_audit.sh
+│   ├── ./scripts/build.sh
+│   ├── ./scripts/common.sh
+│   ├── ./scripts/create_api_key.py
+│   ├── ./scripts/deploy_dev.sh
+│   ├── ./scripts/deploy_prod.sh
+│   ├── ./scripts/dev-api.sh
+│   ├── ./scripts/dev-api-with-db.sh
+│   ├── ./scripts/dev-deploy-core.sh
+│   ├── ./scripts/dev-supervisor.sh
+│   ├── ./scripts/env.sh
+│   ├── ./scripts/fix_db_url.sh
+│   ├── ./scripts/gen_keys_and_env.sh
+│   ├── ./scripts/k8s-dev-cluster.sh
+│   ├── ./scripts/migrate_auth_to_scopes.sh
+│   ├── ./scripts/run_agent_local.sh
+│   ├── ./scripts/run-chaos.sh
+│   ├── ./scripts/run-dev.sh
+│   ├── ./scripts/run-merkle-anchor.sh
+│   ├── ./scripts/smoke_agent.sh
+│   ├── ./scripts/smoke_core.sh
+│   ├── ./scripts/smoke.sh
+│   ├── ./scripts/test.sh
+│   └── ./scripts/wait-for-api.sh
+├── ./secrets
+│   ├── ./secrets/fg_api_keys.example.txt
+│   └── ./secrets/fg_api_keys.txt
+├── ./security
+│   └── ./security/pss
+│       └── ./security/pss/pss-restricted.yaml
+├── ./supervisor-sidecar
+│   ├── ./supervisor-sidecar/Dockerfile
+│   ├── ./supervisor-sidecar/go.mod
+│   ├── ./supervisor-sidecar/main.go
+│   └── ./supervisor-sidecar/supervisor-sidecar
+├── ./tests
+│   ├── ./tests/conftest.py
+│   ├── ./tests/test_auth_contract.py
+│   ├── ./tests/test_auth.py
+│   ├── ./tests/test_auth_tenants.py
+│   ├── ./tests/test_defend_endpoint.py
+│   ├── ./tests/test_doctrine.py
+│   ├── ./tests/test_engine_rules.py
+│   └── ./tests/test_jobs_smoke.py
+└── ./tools
+    ├── ./tools/telemetry
+    │   └── ./tools/telemetry/loader.py
+    └── ./tools/tenants
+        ├── ./tools/tenants/_init_.py
+        ├── ./tools/tenants/__main__.py
+        └── ./tools/tenants/registry.py

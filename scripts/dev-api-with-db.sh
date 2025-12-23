@@ -10,7 +10,7 @@ fi
 
 source .venv/bin/activate
 
-export FG_DB_URL="${FG_DB_URL:-sqlite:///./frostgate_decisions.db}"
+export FG_DB_URL="${FG_DB_URL:-sqlite:////${FG_STATE_DIR:-/var/lib/frostgate/state}/frostgate.db}"
 export FG_API_KEY="${FG_API_KEY:-supersecret}"
 
 echo "[dev-api] DB: ${FG_DB_URL}"

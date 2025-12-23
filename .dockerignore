@@ -3,3 +3,8 @@ __pycache__
 *.pyc
 .git
 state/*.json
+
+# never bake env files
+.env
+agent/.env
+**/.env

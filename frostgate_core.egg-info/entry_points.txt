@@ -1,0 +1,2 @@
+[console_scripts]
+fg-mint-key = scripts.mint_api_key:main

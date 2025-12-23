@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from pathlib import Path
 import random
 import sqlite3
 import time
@@ -42,7 +43,7 @@ def load_config() -> AgentConfig:
     tenant_id = (os.getenv("FG_TENANT_ID") or "t1").strip()
     source = (os.getenv("FG_SOURCE") or os.getenv("HOSTNAME") or "agent1").strip()
 
-    queue_path = os.getenv("FG_AGENT_QUEUE_PATH", "./state/agent_queue.db")
+    queue_path = os.getenv("FG_AGENT_QUEUE_PATH") or str(Path(os.getenv("FG_AGENT_QUEUE_DIR", "/var/lib/frostgate/agent_queue")) / "agent_queue.db")
     flush_interval_s = float(os.getenv("FG_AGENT_FLUSH_INTERVAL_SECONDS", "2"))
     batch_size = int(os.getenv("FG_AGENT_BATCH_SIZE", "50"))
     max_queue = int(os.getenv("FG_AGENT_MAX_QUEUE", "50000"))

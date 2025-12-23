@@ -1,0 +1,34 @@
+=== GIT ===
+main
+5374743e93be5304d12a5ae284045b651b21a07c
+## main...origin/main
+ M .dockerignore
+?? frostgate_context_snapshot.txt
+?? frostgate_tree.txt
+?? frostgate_tree_everything.txt
+?? scripts/create_api_key.py
+?? scripts/env.sh
+
+=== TAGS (top) ===
+v0.1.1-mvp
+v0.1.0-mvp
+v0.1.0
+mvp-core-stable
+v0.8.0
+
+=== COMPOSE KEY LINES ===
+56:      FG_API_KEYS_FILE: /run/secrets/fg_api_keys
+77:    secrets:
+102:    secrets:
+115:secrets:
+
+=== OPENAPI PATHS (local) ===
+/
+/decisions
+/decisions/{decision_id}
+/defend
+/health
+/health/live
+/health/ready
+/ingest
+/metrics

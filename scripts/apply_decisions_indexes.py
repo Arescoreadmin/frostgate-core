@@ -1,3 +1,4 @@
+from pathlib import Path
 #!/usr/bin/env python3
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-DB_URL = os.getenv("FG_DB_URL", "sqlite:///./frostgate_decisions.db").strip()
+DB_URL = os.getenv("FG_DB_URL", f"sqlite:////{(Path(os.getenv('FG_STATE_DIR', '/var/lib/frostgate/state')) / 'frostgate.db').as_posix()}").strip()
 
 IS_SQLITE = DB_URL.startswith("sqlite")
 IS_POSTGRES = DB_URL.startswith("postgresql")

@@ -5,8 +5,20 @@ from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from api.schemas import TelemetryInput
 
-class TelemetryInput(BaseModel):
+from sqlalchemy import Column, DateTime, Float, Integer, String, text
+from sqlalchemy.ext.declarative import declarative_base
+
+created_at = Column(
+    DateTime,
+    nullable=False,
+    server_default=text("CURRENT_TIMESTAMP"),
+)
+
+
+
+class LegacyTelemetryInput(BaseModel):
     """
     Minimal MVP telemetry envelope accepted by /defend.
     """

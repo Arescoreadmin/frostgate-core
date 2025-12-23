@@ -1,123 +1,80 @@
+# api/schemas.py
 from __future__ import annotations
 
-from datetime import datetime
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
-# --- Core enums -------------------------------------------------------------
-
-class Persona(str, Enum):
-    GUARDIAN = "guardian"
-    SENTINEL = "sentinel"
-
-
-class ClassificationRing(str, Enum):
-    PUBLIC = "PUBLIC"
-    INTERNAL = "INTERNAL"
-    CONFIDENTIAL = "CONFIDENTIAL"
-    SECRET = "SECRET"
-
-
-# --- Doctrine / TIED --------------------------------------------------------
-
-class TIEDEstimate(BaseModel):
-    """
-    TIED: Tenant / Infrastructure / End-user / Data impact estimate.
-    Values are 0.0–1.0, higher = more impact / risk.
-    """
-    service_impact: float = Field(..., ge=0.0, le=1.0)
-    user_impact: float = Field(..., ge=0.0, le=1.0)
-    # "allow" | "require_approval" | "reject" (stringly-typed is fine for now)
-    gating_decision: str
-
-
-class DecisionExplain(BaseModel):
-    """
-    Human + machine-readable explanation object for a defense decision.
-    Extends the earlier MVP explain block with doctrine fields.
-    """
-
-    # MVP fields (used in existing tests & responses)
-    summary: str
-    rules_triggered: list[str]
-    anomaly_score: float | None = None
-    llm_note: str | None = None
-
-    # doctrine additions
-    classification: ClassificationRing | None = None
-    persona: Persona | None = None
-    tie_d: TIEDEstimate | None = None
-
-    # ROE output flags
-    roe_applied: bool | None = None
-    disruption_limited: bool | None = None
-    ao_required: bool | None = None
-
-# Backwards-compat alias used by api.main & tests
-ExplainBlock = DecisionExplain
-
-
-# --- Mitigations & defend response -----------------------------------------
 
 class MitigationAction(BaseModel):
-    action: str          # e.g. "block_ip", "require_captcha"
-    target: str          # e.g. "192.0.2.10", "user:alice"
-    reason: str
-    confidence: float = Field(..., ge=0.0, le=1.0)
-    meta: Optional[Dict[str, Any]] = None
+    """
+    Engine expects MitigationAction(...) as a structured object (keyword args).
+    Keep permissive for MVP: action is a string.
+    """
+    model_config = ConfigDict(extra="allow")
 
+    action: str
+    target: Optional[str] = None
+    reason: Optional[str] = None
+    confidence: float = 0.5
 
-class DefendResponse(BaseModel):
-    threat_level: str                    # "low" | "medium" | "high"
-    mitigations: List[MitigationAction] = Field(default_factory=list)
-    explain: ExplainBlock
-
-    ai_adversarial_score: float = 0.0
-    pq_fallback: bool = False
-    clock_drift_ms: Optional[int] = None
-
-
-# --- Ingress telemetry ------------------------------------------------------
-
-from datetime import datetime
-from typing import Dict, Any, Optional
 
 class TelemetryInput(BaseModel):
     """
-    Ingress payload for /defend and related endpoints.
+    Canonical request model for defend/ingest.
 
-    Tests & jobs construct JSON with:
-      - source
-      - tenant_id
-      - timestamp (ISO 8601 string)
-      - payload: free-form dict (e.g., failed_auths, ip, user, etc.)
+    Compatibility:
+      - New shape: payload={...} (tests use this)
+      - Legacy shape: event={...} (defend.py references req.event)
+      - Root fields: event_type/src_ip (defend.py references req.event_type)
+      - Doctrine: classification/persona as plain strings
+      - extra=allow for forward compatibility during MVP
     """
+    model_config = ConfigDict(extra="allow")
 
     source: str
-    tenant_id: str
-    timestamp: datetime
-    payload: Dict[str, Any]
-    meta: Optional[Dict[str, Any]] = None
+    tenant_id: Optional[str] = None
+    timestamp: Optional[str] = None
 
-    # v1 / doctrine fields (optional, backwards compatible)
-    classification: Optional[ClassificationRing] = None
-    persona: Optional[Persona] = None
+    # Doctrine fields as strings
+    classification: Optional[str] = None
+    persona: Optional[str] = None
 
-    model_config = {
-        "extra": "ignore",  # keep ignoring unknowns for safety
-    }
+    # New + legacy containers
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    event: Dict[str, Any] = Field(default_factory=dict)
 
+    # Backfilled convenience fields (defend.py references these directly)
+    event_type: Optional[str] = None
+    src_ip: Optional[str] = None
 
-__all__ = [
-    "Persona",
-    "ClassificationRing",
-    "TIEDEstimate",
-    "DecisionExplain",
-    "ExplainBlock",
-    "MitigationAction",
-    "DefendResponse",
-    "TelemetryInput",
-]
+    @model_validator(mode="after")
+    def _compat_backfill(self) -> "TelemetryInput":
+        # If one of payload/event missing, mirror the other
+        if not isinstance(self.payload, dict):
+            self.payload = {}
+        if not isinstance(self.event, dict):
+            self.event = {}
+
+        if not self.payload and self.event:
+            self.payload = dict(self.event)
+        if not self.event and self.payload:
+            self.event = dict(self.payload)
+
+        # Backfill event_type/src_ip from containers if missing
+        if not self.event_type:
+            self.event_type = (
+                self.payload.get("event_type")
+                or self.event.get("event_type")
+                or None
+            )
+        if not self.src_ip:
+            self.src_ip = (
+                self.payload.get("src_ip")
+                or self.event.get("src_ip")
+                or self.payload.get("source_ip")
+                or self.event.get("source_ip")
+                or None
+            )
+
+        return self

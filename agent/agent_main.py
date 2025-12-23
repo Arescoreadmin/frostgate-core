@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import time
 import uuid
 import hashlib
@@ -19,7 +20,7 @@ from urllib.error import URLError, HTTPError
 # -----------------------------------------------------------------------------
 
 DEFAULT_CORE_URL = os.getenv("FG_CORE_URL", "http://localhost:18080").rstrip("/")
-DEFAULT_QUEUE_DIR = os.getenv("FG_AGENT_QUEUE_DIR", "./agent_queue")
+DEFAULT_QUEUE_DIR = os.getenv("FG_AGENT_QUEUE_DIR", "/var/lib/frostgate/agent_queue")
 DEFAULT_SOURCE = os.getenv("FG_AGENT_SOURCE", "edge1")
 DEFAULT_TENANT = os.getenv("FG_AGENT_TENANT_ID", "t1")
 
