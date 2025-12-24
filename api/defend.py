@@ -133,10 +133,28 @@ class DefendResponse(BaseModel):
 # ---------------------------------------------------------------------
 
 
-def _to_utc(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+def _to_utc(dt: datetime | str | None) -> datetime:
+    if dt is None:
+        return datetime.now(timezone.utc)
+
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    if isinstance(dt, str):
+        s = dt.strip()
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(s)
+        except Exception:
+            return datetime.now(timezone.utc)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+
+    return datetime.now(timezone.utc)
 
 
 def _safe_dump(obj: Any) -> Any:

@@ -96,8 +96,11 @@ def build_app(auth_enabled: bool = True) -> FastAPI:
 
 
 # default import-time instance (some code/tests may import api.main.app)
-app = build_app(
-    auth_enabled=True
-    if os.getenv("FG_AUTH_ENABLED") in (None, "", "1", "true", "True", "yes", "on")
-    else False
-)
+def _env_auth_enabled() -> bool:
+    raw = os.getenv("FG_AUTH_ENABLED")
+    if raw is not None:
+        return raw in ("1", "true", "True", "yes", "on")
+    return bool(os.getenv("FG_API_KEY"))
+
+
+app = build_app(auth_enabled=_env_auth_enabled())
