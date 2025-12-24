@@ -1,35 +1,3 @@
-from __future__ import annotations
-
-def _to_utc(dt):
-    """
-    Accept datetime OR ISO-8601 string and normalize to timezone-aware UTC datetime.
-    Handles trailing 'Z' and naive datetimes.
-    """
-    from datetime import datetime, timezone
-
-    if dt is None:
-        return datetime.now(timezone.utc)
-
-    if isinstance(dt, datetime):
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-
-    if isinstance(dt, str):
-        s = dt.strip()
-        if s.endswith("Z"):
-            s = s[:-1] + "+00:00"
-        try:
-            parsed = datetime.fromisoformat(s)
-        except Exception:
-            return datetime.now(timezone.utc)
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(timezone.utc)
-
-    return datetime.now(timezone.utc)
-
-
 import hashlib
 import json
 import logging
@@ -134,6 +102,10 @@ class DefendResponse(BaseModel):
 
 
 def _to_utc(dt: datetime | str | None) -> datetime:
+    """
+    Accept datetime OR ISO-8601 string and normalize to timezone-aware UTC datetime.
+    Handles trailing 'Z' and naive datetimes.
+    """
     if dt is None:
         return datetime.now(timezone.utc)
 
