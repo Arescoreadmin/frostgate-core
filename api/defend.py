@@ -19,16 +19,13 @@ def _to_utc(dt):
         s = dt.strip()
         if s.endswith("Z"):
             s = s[:-1] + "+00:00"
-        try:
-            parsed = datetime.fromisoformat(s)
-        except Exception:
-            return datetime.now(timezone.utc)
+        parsed = datetime.fromisoformat(s)
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return parsed.astimezone(timezone.utc)
 
+    # last resort: now
     return datetime.now(timezone.utc)
-
 
 import hashlib
 import json
