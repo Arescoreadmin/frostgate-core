@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
+from sqlalchemy import Column, String
 
 from sqlalchemy import (
     Boolean,
@@ -17,6 +18,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
+
+prev_hash = Column(String(64), nullable=True)
+chain_hash = Column(String(64), nullable=True)
 
 
 def utcnow():

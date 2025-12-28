@@ -8,6 +8,8 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 
 from api.defend import router as defend_router
 from api.feed import router as feed_router
+from api.stats import router as stats_router
+
 
 
 ERR_INVALID = "Invalid or missing API key"
@@ -80,6 +82,7 @@ def build_app(auth_enabled: bool = True) -> FastAPI:
     app.include_router(defend_router)
     app.include_router(defend_router, prefix="/v1")
     app.include_router(feed_router)
+    app.include_router(stats_router)
 
     # ---- Health ----
     @app.get("/health")
