@@ -16,8 +16,8 @@ PAUSE_MODE="${PAUSE_MODE:-enter}"
 PAUSE_SECONDS="${PAUSE_SECONDS:-2}"
 
 # CTA
-CTA_EMAIL="${CTA_EMAIL:-you@yourdomain.com}"
-CTA_URL="${CTA_URL:-https://yourdomain.com}"
+CTA_EMAIL="${CTA_EMAIL:-contact@frostgate.ai}"
+CTA_URL="${CTA_URL:-https://frostgate.ai}"
 CTA_TEXT="${CTA_TEXT:-Want a pilot install, pricing, or enterprise hardening?}"
 
 mkdir -p "$LOG_DIR"
@@ -129,10 +129,40 @@ pause
 
   hr
   say "5) Optional: show last 5 decisions in DB (if your DB model/table exists)"
-  # This won't break the demo if db isn't configured; it will just display a message.
-  bash -lc "python - <<'PY'\nimport os\nfrom sqlalchemy import create_engine, text\nurl = os.getenv('FG_DB_URL')\nif not url:\n    print('FG_DB_URL not set; skipping DB preview')\n    raise SystemExit(0)\n\ntry:\n    eng = create_engine(url)\n    with eng.connect() as c:\n        # best-effort table name guess. Adjust if needed.\n        for tbl in ('decision_records','decisions','decisionrecord','decision_record'):\n            try:\n                rows = c.execute(text(f\"select id, event_id, event_type, threat_level, created_at from {tbl} order by id desc limit 5\")).fetchall()\n                print(f\"Table: {tbl}\")\n                for r in rows:\n                    print(r)\n                break\n            except Exception:\n                continue\n        else:\n            print('Could not find a decisions table; skipping')\nexcept Exception as e:\n    print('DB preview skipped:', repr(e))\nPY" 2>&1 | tee -a "$LOG_FILE"
-  pause
+  cat > /tmp/fg_db_preview.py <<'PY'
+import os
+from sqlalchemy import create_engine, text
 
+url = os.getenv("FG_DB_URL")
+if not url:
+    print("FG_DB_URL not set; skipping DB preview")
+    raise SystemExit(0)
+
+try:
+    eng = create_engine(url)
+    with eng.connect() as c:
+        # best-effort table name guesses
+        for tbl in ("decision_records", "decisions", "decisionrecord", "decision_record"):
+            try:
+                rows = c.execute(
+                    text(f"select id, event_id, event_type, threat_level, created_at from {tbl} order by id desc limit 5")
+                ).fetchall()
+                print(f"Table: {tbl}")
+                for r in rows:
+                    print(r)
+                break
+            except Exception:
+                continue
+        else:
+            print("Could not find a decisions table; skipping")
+except Exception as e:
+    print("DB preview skipped:", repr(e))
+PY
+
+run "python /tmp/fg_db_preview.py"
+run "rm -f /tmp/fg_db_preview.py"
+
+pause
   cta
 }
 
