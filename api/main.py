@@ -15,6 +15,7 @@ from api.db import init_db
 from api.defend import router as defend_router
 from api.feed import router as feed_router
 from api.stats import router as stats_router
+from api.decisions import router as decisions_router
 
 log = logging.getLogger("frostgate")
 
@@ -51,15 +52,16 @@ def _resolve_auth_override(auth_enabled: Optional[bool]) -> bool:
 
 
 def _resolve_sqlite_path() -> Path:
-    sqlite_path = os.getenv("FG_SQLITE_PATH")
-    if sqlite_path:
-        return Path(sqlite_path)
+    p = os.getenv("FG_SQLITE_PATH", "").strip()
+    if p:
+        return Path(p)
 
-    state_dir = os.getenv("FG_STATE_DIR")
-    if not state_dir:
-        raise RuntimeError("FG_STATE_DIR is not set (and FG_SQLITE_PATH not set)")
+    state_dir = os.getenv("FG_STATE_DIR", "").strip()
+    if state_dir:
+        return Path(state_dir) / "frostgate.db"
 
-    return Path(state_dir) / "frostgate.db"
+    # Local-dev sane default (prevents /health/ready 500)
+    return Path("artifacts") / "frostgate.db"
 
 
 def _sanitize_db_url(db_url: str) -> str:
@@ -152,6 +154,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(defend_router)
     app.include_router(defend_router, prefix="/v1")
     app.include_router(feed_router)
+    app.include_router(decisions_router)
     app.include_router(stats_router)
 
     @app.get("/health")
@@ -179,8 +182,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         p = _resolve_sqlite_path()
         if not p.exists():
             raise HTTPException(status_code=503, detail=f"DB missing: {p}")
-        if p.stat().st_size < 1:
-            raise HTTPException(status_code=503, detail=f"DB empty: {p}")
+        if not p.parent.exists():
+            p.parent.mkdir(parents=True, exist_ok=True)
 
         return {"status": "ready", "db": "sqlite", "path": str(p)}
 

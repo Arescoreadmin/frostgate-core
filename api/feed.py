@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Depends
 from pydantic import BaseModel, Field
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import require_scopes, verify_api_key, require_api_key_always
 from api.db import get_db
 from api.db_models import DecisionRecord
+from api.decisions import _loads_json_text
 from api.ratelimit import rate_limit_guard  # ← ADD THIS
 
 router = APIRouter(
@@ -26,7 +27,14 @@ Severity = Literal["info", "low", "medium", "high", "critical"]
 
 
 class FeedItem(BaseModel):
+    id: Optional[int] = None
+    event_id: Optional[str] = None
+    event_type: Optional[str] = None
+    source: Optional[str] = None
+    tenant_id: Optional[str] = None
+    threat_level: Optional[str] = None
     decision_id: str
+    decision_diff: object | None = None
     timestamp: str
     severity: Severity
     title: str
@@ -95,6 +103,14 @@ def feed_live(
         items.append(
             FeedItem(
                 decision_id=decision_id,
+                decision_diff=_loads_json_text(getattr(r, "decision_diff_json", None)),
+
+        id=getattr(r, 'id', None),
+        event_id=getattr(r, 'event_id', None),
+        event_type=getattr(r, 'event_type', None),
+        source=getattr(r, 'source', None),
+        tenant_id=getattr(r, 'tenant_id', None),
+        threat_level=getattr(r, 'threat_level', None),
                 timestamp=ts,
                 severity=severity,
                 title=f"{event_type or 'event'} from {source or 'unknown'}",

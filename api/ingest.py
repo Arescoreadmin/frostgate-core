@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from api.decision_diff import compute_decision_diff, snapshot_from_current, snapshot_from_record
 import logging
 import time
 import uuid
@@ -173,6 +174,29 @@ async def ingest(
     try:
         rules = decision.get("rules_triggered") or decision.get("rules") or []
         summary = decision.get("summary") or ""
+        # --- Decision Diff (compute + persist) ---
+        try:
+            prev = (
+                db.query(DecisionRecord)
+                .filter(
+                    DecisionRecord.tenant_id == tenant_id,
+                    DecisionRecord.source == source,
+                    DecisionRecord.event_type == event_type,
+                )
+                .order_by(DecisionRecord.id.desc())
+                .first()
+            )
+            prev_snapshot = snapshot_from_record(prev) if prev is not None else None
+            curr_snapshot = snapshot_from_current(
+                threat_level=threat_level,
+                rules_triggered=rules,
+                score=decision.get("score"),
+            )
+            decision_diff_obj = compute_decision_diff(prev_snapshot, curr_snapshot)
+        except Exception:
+            decision_diff_obj = None
+        # --- end Decision Diff ---
+
         rec = DecisionRecord(
             tenant_id=tenant_id,
             source=source,
@@ -188,6 +212,7 @@ async def ingest(
             response_json=_safe_json(resp.model_dump()),
             rules_triggered_json=_safe_json(rules),
             explain_summary=str(summary),
+            decision_diff_json=decision_diff_obj,
         )
         db.add(rec)
         db.commit()

@@ -39,9 +39,28 @@ def _resolve_sqlite_path() -> Path:
 
 
 def _sqlite_url() -> str:
-    p = _resolve_sqlite_path()
+    state_dir = os.getenv("FG_STATE_DIR", "state")  # default local ./state for dev
+    p = Path(state_dir) / "frostgate.db"
     p.parent.mkdir(parents=True, exist_ok=True)
-    return f"sqlite:///{p.as_posix()}"
+    return f"sqlite+pysqlite:///{p}"
+
+
+def _sqlite_ensure_decisions_columns(engine) -> None:
+    """
+    SQLite does not auto-migrate schemas. We do a minimal, safe ALTER for new MVP columns.
+    """
+    try:
+        with engine.connect() as conn:
+            # Ensure decisions table exists before pragma check
+            cols = conn.exec_driver_sql("PRAGMA table_info(decisions)").fetchall()
+            if not cols:
+                return
+            names = {row[1] for row in cols}  # (cid, name, type, notnull, dflt_value, pk)
+            if "decision_diff_json" not in names:
+                conn.exec_driver_sql("ALTER TABLE decisions ADD COLUMN decision_diff_json JSON")
+    except Exception:
+        # Never block startup due to migration attempt; logging happens elsewhere.
+        return
 
 
 def _db_url() -> str:
@@ -74,6 +93,8 @@ def get_engine() -> Engine:
 
         # Ensure schema
         Base.metadata.create_all(bind=_ENGINE)
+        _sqlite_ensure_decisions_columns(_ENGINE)
+
 
         logger.warning("DB_ENGINE=%s", url)
         if url.startswith("sqlite"):

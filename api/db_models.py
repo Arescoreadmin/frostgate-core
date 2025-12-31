@@ -74,5 +74,6 @@ class DecisionRecord(Base):
     pq_fallback = Column(Boolean, nullable=True)
 
     rules_triggered_json = Column(JSON, nullable=False, default=list)
+    decision_diff_json = Column(JSON, nullable=True)
     request_json = Column(JSON, nullable=False)
     response_json = Column(JSON, nullable=False)

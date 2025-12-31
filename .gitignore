@@ -108,3 +108,7 @@ artifacts/
 .pytest_cache/
 __pycache__/
 *.db
+# signing keys (never commit)
+minisign.key
+minisign.pub
+CONTEXT_SNAPSHOT.md

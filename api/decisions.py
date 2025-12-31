@@ -38,17 +38,24 @@ def _iso(dt: Any) -> Optional[str]:
         return None
 
 
-def _loads_json_text(s: Optional[str]) -> Any:
-    """
-    Your DB stores JSON fields as TEXT (request_json/response_json/rules_triggered_json).
-    This safely parses JSON if possible, otherwise returns the raw string.
-    """
-    if not s:
+def _loads_json_text(v):
+    if v is None:
         return None
-    try:
-        return json.loads(s)
-    except Exception:
-        return s
+    # if ORM gives us dict/list already, keep it
+    if isinstance(v, (dict, list)):
+        return v
+    if isinstance(v, (bytes, bytearray)):
+        v = v.decode("utf-8", errors="ignore")
+    if isinstance(v, str):
+        v = v.strip()
+        if not v:
+            return None
+        try:
+            import json
+            return json.loads(v)
+        except Exception:
+            return None
+    return None
 
 
 # -------------------------
@@ -59,7 +66,7 @@ class DecisionOut(BaseModel):
     id: int
     created_at: Optional[str] = None
 
-    tenant_id: str
+    tenant_id: Optional[str]
     source: str
     event_id: str
     event_type: str
@@ -75,7 +82,7 @@ class DecisionOut(BaseModel):
 
     request: Optional[Any] = None
     response: Optional[Any] = None
-
+    decision_diff: Optional[Any] = None
 
 class DecisionsPage(BaseModel):
     items: list[DecisionOut] = Field(default_factory=list)
@@ -148,6 +155,7 @@ def list_decisions(
                 pq_fallback=bool(getattr(r, "pq_fallback", False)),
                 rules_triggered=_loads_json_text(getattr(r, "rules_triggered_json", None)),
                 explain_summary=getattr(r, "explain_summary", None),
+            decision_diff=_loads_json_text(getattr(r, "decision_diff_json", None)),
                 latency_ms=int(getattr(r, "latency_ms", 0) or 0),
             )
 

@@ -16,8 +16,10 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import require_scopes, verify_api_key
 from api.db import get_db
 from api.db_models import DecisionRecord
+from api.decision_diff import compute_decision_diff, snapshot_from_current, snapshot_from_record
 from api.ratelimit import rate_limit_guard
 from api.schemas import TelemetryInput
+from api.schemas_doctrine import TieD
 
 log = logging.getLogger("frostgate.defend")
 
@@ -43,7 +45,9 @@ def _parse_dt(s: str) -> datetime:
     return datetime.fromisoformat(v)
 
 
-def _to_utc(dt: datetime | str) -> datetime:
+def _to_utc(dt: datetime | str | None) -> datetime:
+    if dt is None:
+        return datetime.now(timezone.utc)
     if isinstance(dt, str):
         dt = _parse_dt(dt)
     if dt.tzinfo is None:
@@ -124,7 +128,6 @@ def _value_for_column(model_cls: Any, col_name: str, value: Any) -> Any:
     if is_json_col:
         return value
 
-    # Non-JSON column: only serialize complex objects.
     if isinstance(value, (dict, list, tuple)):
         return _canonical_json(value)
 
@@ -181,6 +184,7 @@ def _normalize_failed_auths(payload: dict[str, Any]) -> int:
         or payload.get("fail_count")
         or payload.get("failures")
         or payload.get("attempts")
+        or payload.get("failed_attempts")
         or 0
     )
     try:
@@ -233,7 +237,10 @@ class DecisionExplain(BaseModel):
     rules_triggered: list[str] = Field(default_factory=list)
     anomaly_score: float = 0.0
     llm_note: Optional[str] = None
-    tie_d: Optional[dict[str, Any]] = None
+
+    # Tests require this to exist (not None).
+    tie_d: TieD = Field(default_factory=TieD)
+
     score: int = 0
 
     roe_applied: bool = False
@@ -244,6 +251,8 @@ class DecisionExplain(BaseModel):
 
 
 class DefendResponse(BaseModel):
+    # Tests require this to be a string, not None.
+    explanation_brief: str
     threat_level: Literal["none", "low", "medium", "high"]
     mitigations: list[MitigationAction] = Field(default_factory=list)
     explain: DecisionExplain
@@ -286,7 +295,8 @@ def evaluate(
     mitigations: list[MitigationAction] = []
     anomaly_score = 0.1
 
-    if et in ("auth", "auth.bruteforce") and failed_auths >= 5 and src_ip:
+    # MVP rule: auth brute force => block_ip
+    if et in ("auth", "auth.bruteforce", "auth_attempt") and failed_auths >= 5 and src_ip:
         rules_triggered.append("rule:ssh_bruteforce")
         mitigations.append(
             MitigationAction(
@@ -314,7 +324,16 @@ def _apply_doctrine(
     persona: Optional[str],
     classification: Optional[str],
     mitigations: list[MitigationAction],
-) -> tuple[list[MitigationAction], dict[str, Any]]:
+) -> tuple[list[MitigationAction], TieD]:
+    """
+    Contract:
+      - tie_d must always exist
+      - guardian + SECRET:
+          - roe_applied=True
+          - ao_required=True
+          - cap block_ip mitigations to 1
+          - gating_decision present: allow | require_approval | reject
+    """
     persona_v = (persona or "").strip().lower() or None
     class_v = (classification or "").strip().upper() or None
 
@@ -324,10 +343,19 @@ def _apply_doctrine(
 
     out = list(mitigations)
 
+    # Baseline impacts (always initialized, no UnboundLocalError nonsense)
+    base_impact = 0.0
+    base_user_impact = 0.0
+
+    if any(m.action == "block_ip" for m in out):
+        base_impact = 0.35
+        base_user_impact = 0.20
+
     if persona_v == "guardian" and class_v == "SECRET":
         roe_applied = True
         ao_required = True
 
+        # cap block_ip to 1 (guardian cap)
         block_ips = [m for m in out if m.action == "block_ip"]
         if len(block_ips) > 1:
             disruption_limited = True
@@ -335,13 +363,31 @@ def _apply_doctrine(
             out = [m for m in out if m.action != "block_ip"]
             out.insert(0, first)
 
-    return out, {
-        "roe_applied": roe_applied,
-        "disruption_limited": disruption_limited,
-        "ao_required": ao_required,
-        "persona": persona_v,
-        "classification": class_v,
-    }
+        # doctrine reduces blast radius by limiting actions
+        if disruption_limited:
+            base_impact = max(0.0, base_impact - 0.10)
+            base_user_impact = max(0.0, base_user_impact - 0.05)
+
+    # gating decision: allow | require_approval | reject
+    gating_decision: Literal["allow", "require_approval", "reject"] = "allow"
+    if persona_v == "guardian" and class_v == "SECRET":
+        # require approval if we actually took a disruptive action
+        gating_decision = "require_approval" if any(m.action == "block_ip" for m in out) else "allow"
+
+    tied = TieD(
+        roe_applied=roe_applied,
+        disruption_limited=disruption_limited,
+        ao_required=ao_required,
+        persona=persona_v,
+        classification=class_v,
+        service_impact=float(min(1.0, max(0.0, base_impact))),
+        user_impact=float(min(1.0, max(0.0, base_user_impact))),
+        gating_decision=gating_decision,
+        # policy_version is defaulted in TieD, but leaving explicit is fine if you prefer:
+        # policy_version="doctrine-v1",
+    )
+
+    return out, tied
 
 
 # =============================================================================
@@ -398,6 +444,7 @@ def _persist_decision_best_effort(
     rules_triggered: list[str],
     anomaly_score: float,
     latency_ms: int,
+    score: int,
 ) -> None:
     ts_val = getattr(req, "timestamp", _utcnow())
     created_at = _to_utc(ts_val)
@@ -427,12 +474,37 @@ def _persist_decision_best_effort(
             "latency_ms": int(latency_ms or 0),
         }
 
-        # Store rules/request/response in whichever columns exist, with correct serialization.
-        # - *_json columns might be TEXT or JSON depending on your model.
-        # - *_obj columns are backward-compat variants some repos use.
         rules_value = list(rules_triggered or [])
         req_value = dict(request_payload)
         resp_value = response_payload
+
+        # --- Decision Diff (compute + persist) ---
+        decision_diff_obj = None
+        try:
+            prev = (
+                db.query(DecisionRecord)
+                .filter(
+                    DecisionRecord.tenant_id == req.tenant_id,
+                    DecisionRecord.source == req.source,
+                    DecisionRecord.event_type == event_type,
+                )
+                .order_by(DecisionRecord.id.desc())
+                .first()
+            )
+            prev_snapshot = snapshot_from_record(prev) if prev is not None else None
+            curr_snapshot = snapshot_from_current(
+                threat_level=str(decision.threat_level),
+                rules_triggered=rules_value,
+                score=int(score or 0),
+            )
+            decision_diff_obj = compute_decision_diff(prev_snapshot, curr_snapshot)
+
+            if hasattr(DecisionRecord, "decision_diff_json"):
+                record_kwargs["decision_diff_json"] = decision_diff_obj
+        except Exception:
+            log.exception("decision diff compute/persist failed")
+            decision_diff_obj = None
+        # --- end Decision Diff ---
 
         # rules_triggered_json / request_json / response_json
         for col, val in (
@@ -449,10 +521,10 @@ def _persist_decision_best_effort(
 
         if _supports_chain_fields():
             last = db.query(DecisionRecord).order_by(DecisionRecord.id.desc()).first()
-            prev = getattr(last, "chain_hash", None) if last else None
-            record.prev_hash = prev
+            prev_hash = getattr(last, "chain_hash", None) if last else None
+            record.prev_hash = prev_hash
             record.chain_hash = _compute_chain_hash(
-                prev,
+                prev_hash,
                 _hash_payload(
                     event_id=event_id,
                     created_at=created_at,
@@ -466,100 +538,74 @@ def _persist_decision_best_effort(
 
         db.add(record)
         db.commit()
-
-        log.info(
-            "persisted decision tenant=%s event_id=%s event_type=%s threat=%s latency_ms=%s",
-            req.tenant_id,
-            event_id,
-            event_type,
-            decision.threat_level,
-            int(latency_ms or 0),
-        )
-
     except IntegrityError:
         db.rollback()
-        log.info("duplicate decision ignored tenant=%s event_id=%s", req.tenant_id, event_id)
+        # event_id may be unique; treat duplicates as OK
+        return
     except Exception:
-        try:
-            db.rollback()
-        except Exception:
-            pass
-        log.exception(
-            "FAILED to persist decision tenant=%s event_id=%s event_type=%s",
-            req.tenant_id,
-            event_id,
-            event_type,
-        )
-
-        if os.getenv("FG_DEBUG_DECISIONS", "false").lower() in ("1", "true", "yes", "on"):
-            log.error("DEBUG_DECISION request=%s", _canonical_json(request_payload))
-            log.error("DEBUG_DECISION response=%s", _canonical_json(response_payload))
+        db.rollback()
+        log.exception("failed to persist decision")
 
 
 # =============================================================================
-# Route
+# Endpoint
 # =============================================================================
 
 
 @router.post("", response_model=DefendResponse)
-async def defend(request: TelemetryInput, db: Session = Depends(get_db)) -> DefendResponse:
-    start = time.perf_counter()
+def defend(req: TelemetryInput, db: Session = Depends(get_db)) -> DefendResponse:
+    t0 = time.time()
 
-    event_type = _coerce_event_type(request)
-    event_id = _event_id(request)
+    event_type = _coerce_event_type(req)
+    event_id = _event_id(req)
 
-    threat_level, rules_triggered, mitigations, anomaly_score, score = evaluate(request)
+    ts_val = getattr(req, "timestamp", _utcnow())
+    clock_drift = _clock_drift_ms(ts_val)
 
-    mitigations, doctrine = _apply_doctrine(
-        persona=getattr(request, "persona", None),
-        classification=getattr(request, "classification", None),
-        mitigations=mitigations,
+    threat_level, rules_triggered, mitigations, anomaly_score, score = evaluate(req)
+
+    persona = getattr(req, "persona", None)
+    classification = getattr(req, "classification", None)
+
+    mitigations, tie_d = _apply_doctrine(persona, classification, mitigations)
+
+    summary = f"{event_type}: {threat_level} ({score})"
+
+    explain = DecisionExplain(
+        summary=summary,
+        rules_triggered=list(rules_triggered),
+        anomaly_score=float(anomaly_score or 0.0),
+        score=int(score or 0),
+        tie_d=tie_d,
+        roe_applied=bool(tie_d.roe_applied),
+        disruption_limited=bool(tie_d.disruption_limited),
+        ao_required=bool(tie_d.ao_required),
+        persona=tie_d.persona,
+        classification=tie_d.classification,
     )
 
-    ts_val = getattr(request, "timestamp", _utcnow())
-    drift_ms = _clock_drift_ms(ts_val)
-    latency_ms = int((time.perf_counter() - start) * 1000.0)
-
-    tie_d = {
-        "event_age_ms": _event_age_ms(ts_val),
-        "clock_drift_ms_reported": int(drift_ms or 0),
-        "latency_ms": latency_ms,
-        "service_impact": float(0.10 if doctrine["disruption_limited"] else 0.05),
-        "user_impact": float(0.20 if doctrine["ao_required"] else 0.05),
-        "gating_decision": ("require_approval" if doctrine["ao_required"] else "allow"),
-    }
-
-    decision = DefendResponse(
+    resp = DefendResponse(
+        explanation_brief=summary,  # must be str for tests
         threat_level=threat_level,
         mitigations=mitigations,
-        explain=DecisionExplain(
-            summary=f"MVP decision for tenant={request.tenant_id}, source={request.source}",
-            rules_triggered=rules_triggered,
-            anomaly_score=float(anomaly_score or 0.0),
-            llm_note="Rules+score engine. Deterministic.",
-            tie_d=tie_d,
-            score=int(score or 0),
-            roe_applied=bool(doctrine["roe_applied"]),
-            disruption_limited=bool(doctrine["disruption_limited"]),
-            ao_required=bool(doctrine["ao_required"]),
-            persona=doctrine["persona"],
-            classification=doctrine["classification"],
-        ),
+        explain=explain,
         ai_adversarial_score=0.0,
         pq_fallback=False,
-        clock_drift_ms=int(drift_ms or 0),
+        clock_drift_ms=int(clock_drift or 0),
         event_id=event_id,
     )
 
+    latency_ms = int((time.time() - t0) * 1000)
     _persist_decision_best_effort(
         db=db,
-        req=request,
+        req=req,
         event_id=event_id,
         event_type=event_type,
-        decision=decision,
+        decision=resp,
         rules_triggered=rules_triggered,
         anomaly_score=anomaly_score,
         latency_ms=latency_ms,
+        score=score,
     )
 
-    return decision
+    return resp
