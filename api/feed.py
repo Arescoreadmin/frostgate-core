@@ -1,123 +1,206 @@
-
 from __future__ import annotations
 
-from typing import List, Literal, Optional
+from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, Query, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_scopes, verify_api_key, require_api_key_always
+from api.auth_scopes import verify_api_key
 from api.db import get_db
 from api.db_models import DecisionRecord
 from api.decisions import _loads_json_text
-from api.ratelimit import rate_limit_guard  # ← ADD THIS
+from api.ratelimit import rate_limit_guard
+
 
 router = APIRouter(
     prefix="/feed",
     tags=["feed"],
-    dependencies=[
-        Depends(verify_api_key),
-        Depends(require_scopes("feed:read")),
-        Depends(rate_limit_guard),
-    ],
+    dependencies=[Depends(rate_limit_guard), Depends(verify_api_key)],
 )
-
-Severity = Literal["info", "low", "medium", "high", "critical"]
 
 
 class FeedItem(BaseModel):
-    id: Optional[int] = None
-    event_id: Optional[str] = None
-    event_type: Optional[str] = None
-    source: Optional[str] = None
-    tenant_id: Optional[str] = None
-    threat_level: Optional[str] = None
-    decision_id: str
-    decision_diff: object | None = None
-    timestamp: str
-    severity: Severity
-    title: str
-    summary: str
-    action_taken: str
-    confidence: float = Field(ge=0.0, le=1.0)
+    id: int
+    event_id: str | None = None
+    event_type: str | None = None
+    source: str | None = None
+    tenant_id: str | None = None
+
+    threat_level: str | None = None
+    decision_id: str | None = None
+
+    timestamp: str | None = None
+    severity: str | None = None
+    title: str | None = None
+    summary: str | None = None
+    action_taken: str | None = None
+    confidence: float | None = None
+
+    # Helpful derived fields
+    score: float | None = None
+    rules_triggered: List[str] = Field(default_factory=list)
+    changed_fields: List[str] = Field(default_factory=list)
+    action_reason: str | None = None
+    fingerprint: str | None = None
+
+    # Heavy stuff, keep collapsible in UI
+    decision_diff: Any | None = None
+    metadata: Any | None = None
 
 
 class FeedLiveResponse(BaseModel):
-    items: List[FeedItem]
+    items: List[FeedItem] = Field(default_factory=list)
+    next_since_id: int | None = None
 
 
-def _severity_from_threat(threat: str) -> Severity:
-    v = (threat or "").lower()
-    if v in ("high",):
-        return "high"
-    if v in ("medium",):
-        return "medium"
-    if v in ("low",):
-        return "low"
-    if v in ("critical",):
-        return "critical"
-    return "info"
+def _coerce_str(v: Any) -> str | None:
+    if v is None:
+        return None
+    return str(v)
 
 
-def _action_from_record(r: DecisionRecord) -> str:
-    # Best-effort summary of what was done
-    # If response_obj exists and has mitigations, use first action; else log_only.
-    resp = getattr(r, "response_obj", None) or {}
-    try:
-        mitigations = resp.get("mitigations") or []
-        if mitigations:
-            return str(mitigations[0].get("action") or "log_only")
-    except Exception:
-        pass
-    return "log_only"
+def _derive_from_diff(diff: Any) -> tuple[list[str], float | None, list[str], str | None]:
+    """
+    Returns: (rules_triggered, score, changed_fields, action_reason)
+    """
+    if not isinstance(diff, dict):
+        return ([], None, [], None)
+
+    prev = diff.get("prev") or {}
+    curr = diff.get("curr") or {}
+    changes = diff.get("changes") or []
+
+    # Rules/score often live in prev/curr in your records
+    rules = curr.get("rules_triggered") or prev.get("rules_triggered") or []
+    score = curr.get("score")
+    changed_fields: list[str] = []
+
+    if isinstance(changes, list):
+        for c in changes:
+            if isinstance(c, dict) and "field" in c:
+                changed_fields.append(str(c["field"]))
+            elif isinstance(c, str):
+                changed_fields.append(c)
+
+    # Tiny human reason: prefer diff summary if present
+    action_reason = diff.get("summary")
+    if action_reason and len(str(action_reason)) > 240:
+        action_reason = str(action_reason)[:240] + "…"
+
+    # Normalize rules list
+    rules_out: list[str] = []
+    if isinstance(rules, list):
+        rules_out = [str(r) for r in rules][:10]
+    elif isinstance(rules, str):
+        rules_out = [rules]
+
+    return (rules_out, score if isinstance(score, (int, float)) else None, changed_fields, _coerce_str(action_reason))
 
 
-@router.get("/live", dependencies=[Depends(require_scopes("feed:read"))], response_model=FeedLiveResponse)
+@router.get("/live", response_model=FeedLiveResponse)
 def feed_live(
-    _auth=Depends(require_api_key_always), limit: int = Query(10, ge=1, le=200),
     db: Session = Depends(get_db),
-) -> FeedLiveResponse:
-    # Newest-first, stable
-    q = (
-        db.query(DecisionRecord)
-        .order_by(getattr(DecisionRecord, "created_at").desc())
-        .limit(limit)
-    )
-    rows = list(q)
 
-    items: List[FeedItem] = []
+    # pagination/incremental
+    limit: int = Query(default=50, ge=1, le=200),
+    since_id: int | None = Query(default=None, ge=0),
+
+    # filters
+    severity: str | None = Query(default=None),
+    threat_level: str | None = Query(default=None),
+    action_taken: str | None = Query(default=None),
+    source: str | None = Query(default=None),
+    tenant_id: str | None = Query(default=None),
+    q: str | None = Query(default=None, description="search title/summary/event_type/event_id"),
+
+    # toggles
+    only_changed: bool = Query(default=False),
+    only_actionable: bool = Query(default=False),
+):
+    qry = db.query(DecisionRecord)
+
+    if since_id is not None:
+        qry = qry.filter(DecisionRecord.id > since_id)
+
+    if severity:
+        qry = qry.filter(DecisionRecord.severity == severity)
+    if threat_level:
+        qry = qry.filter(DecisionRecord.threat_level == threat_level)
+    if action_taken:
+        qry = qry.filter(DecisionRecord.action_taken == action_taken)
+    if source:
+        qry = qry.filter(DecisionRecord.source == source)
+    if tenant_id:
+        qry = qry.filter(DecisionRecord.tenant_id == tenant_id)
+
+    # crude but effective search across a few columns
+    if q:
+        like = f"%{q}%"
+        qry = qry.filter(
+            (DecisionRecord.title.ilike(like))
+            | (DecisionRecord.summary.ilike(like))
+            | (DecisionRecord.event_type.ilike(like))
+            | (DecisionRecord.event_id.ilike(like))
+            | (DecisionRecord.decision_id.ilike(like))
+        )
+
+    # ordering: newest first for initial load; incremental still fine because we filter id > since
+    qry = qry.order_by(DecisionRecord.id.desc()).limit(limit)
+
+    rows = qry.all()
+
+    items: list[FeedItem] = []
+    max_id = since_id or 0
+
     for r in rows:
-        created_at = getattr(r, "created_at", None)
-        ts = created_at.isoformat() if created_at is not None else ""
+        max_id = max(max_id, int(r.id))
 
-        threat = getattr(r, "threat_level", "info") or "info"
-        severity = _severity_from_threat(str(threat))
+        diff = _loads_json_text(getattr(r, "decision_diff_json", None))
+        meta = _loads_json_text(getattr(r, "metadata_json", None))
 
-        event_type = getattr(r, "event_type", "") or ""
-        source = getattr(r, "source", "") or ""
-        summary = getattr(r, "explain_summary", "") or ""
+        rules_triggered, score, changed_fields, action_reason = _derive_from_diff(diff)
 
-        decision_id = str(getattr(r, "event_id", ""))  # stable id in MVP
+        # actionable heuristic
+        actionable = True
+        if getattr(r, "action_taken", None) == "log_only" and (getattr(r, "severity", None) not in ("high", "critical")):
+            actionable = False
+
+        if only_actionable and not actionable:
+            continue
+
+        if only_changed and not changed_fields:
+            continue
+
+        fingerprint = f"{getattr(r,'event_type',None)}|{getattr(r,'source',None)}|{getattr(r,'tenant_id',None)}|{getattr(r,'threat_level',None)}|{getattr(r,'action_taken',None)}"
 
         items.append(
             FeedItem(
-                decision_id=decision_id,
-                decision_diff=_loads_json_text(getattr(r, "decision_diff_json", None)),
+                id=int(r.id),
+                event_id=_coerce_str(getattr(r, "event_id", None)),
+                event_type=_coerce_str(getattr(r, "event_type", None)),
+                source=_coerce_str(getattr(r, "source", None)),
+                tenant_id=_coerce_str(getattr(r, "tenant_id", None)),
 
-        id=getattr(r, 'id', None),
-        event_id=getattr(r, 'event_id', None),
-        event_type=getattr(r, 'event_type', None),
-        source=getattr(r, 'source', None),
-        tenant_id=getattr(r, 'tenant_id', None),
-        threat_level=getattr(r, 'threat_level', None),
-                timestamp=ts,
-                severity=severity,
-                title=f"{event_type or 'event'} from {source or 'unknown'}",
-                summary=summary or f"Decision {severity} for {source or 'unknown'}",
-                action_taken=_action_from_record(r),
-                confidence=0.80 if severity in ("high", "medium") else 0.60,
+                threat_level=_coerce_str(getattr(r, "threat_level", None)),
+                decision_id=_coerce_str(getattr(r, "decision_id", None)),
+
+                timestamp=_coerce_str(getattr(r, "timestamp", None)),
+                severity=_coerce_str(getattr(r, "severity", None)),
+                title=_coerce_str(getattr(r, "title", None)),
+                summary=_coerce_str(getattr(r, "summary", None)),
+                action_taken=_coerce_str(getattr(r, "action_taken", None)),
+                confidence=getattr(r, "confidence", None),
+
+                score=score,
+                rules_triggered=rules_triggered,
+                changed_fields=changed_fields,
+                action_reason=action_reason,
+                fingerprint=fingerprint,
+
+                decision_diff=diff,
+                metadata=meta,
             )
         )
 
-    return FeedLiveResponse(items=items)
+    return FeedLiveResponse(items=items, next_since_id=max_id)

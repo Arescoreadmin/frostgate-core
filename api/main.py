@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -16,6 +15,8 @@ from api.defend import router as defend_router
 from api.feed import router as feed_router
 from api.stats import router as stats_router
 from api.decisions import router as decisions_router
+from api.ui import router as ui_router
+from api.dev_events import router as dev_events_router
 
 log = logging.getLogger("frostgate")
 
@@ -45,7 +46,6 @@ def _resolve_auth_enabled_from_env() -> bool:
 
 
 def _resolve_auth_override(auth_enabled: Optional[bool]) -> bool:
-    # False is a valid explicit override.
     if auth_enabled is not None:
         return bool(auth_enabled)
     return _resolve_auth_enabled_from_env()
@@ -60,7 +60,7 @@ def _resolve_sqlite_path() -> Path:
     if state_dir:
         return Path(state_dir) / "frostgate.db"
 
-    # Local-dev sane default (prevents /health/ready 500)
+    # Local-dev sane default
     return Path("artifacts") / "frostgate.db"
 
 
@@ -82,13 +82,21 @@ def _global_expected_api_key() -> str:
     return os.getenv("FG_API_KEY") or "supersecret"
 
 
+def _dev_enabled() -> bool:
+    return os.getenv("FG_DEV_EVENTS_ENABLED", "0").strip() == "1"
+
+
 def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
-    # Resolve ONCE. Never re-resolve later. Never mutate per-request.
     resolved_auth_enabled = _resolve_auth_override(auth_enabled)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         try:
+            # If using sqlite mode, ensure directory exists BEFORE init_db()
+            if not os.getenv("FG_DB_URL"):
+                p = _resolve_sqlite_path()
+                p.parent.mkdir(parents=True, exist_ok=True)
+
             init_db()
             app.state.db_init_ok = True
             app.state.db_init_error = None
@@ -100,7 +108,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     app = FastAPI(title="frostgate-core", version="0.1.0", lifespan=lifespan)
 
-    # Freeze state at build time
+    # Frozen state
     app.state.auth_enabled = bool(resolved_auth_enabled)
     app.state.service = os.getenv("FG_SERVICE", "frostgate-core")
     app.state.env = os.getenv("FG_ENV", "dev")
@@ -136,7 +144,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             _fail()
 
     def require_status_auth(req: Request) -> None:
-        # Tenant auth (if tenant header present) always enforced.
+        # Tenant auth always enforced if present
         check_tenant_if_present(req)
 
         # Global auth gate
@@ -150,12 +158,17 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         if str(api_key) != str(_global_expected_api_key()):
             _fail()
 
-    # Routes
+    # Routes (no duplicates, no shadowing)
     app.include_router(defend_router)
     app.include_router(defend_router, prefix="/v1")
     app.include_router(feed_router)
     app.include_router(decisions_router)
     app.include_router(stats_router)
+    app.include_router(ui_router)
+
+    # Dev-only routes are only mounted when explicitly enabled
+    if _dev_enabled():
+        app.include_router(dev_events_router)
 
     @app.get("/health")
     async def health(request: Request) -> dict:
@@ -180,10 +193,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             return {"status": "ready", "db": "url"}
 
         p = _resolve_sqlite_path()
+        # At this point, init_db should have created it if sqlite is configured correctly.
         if not p.exists():
             raise HTTPException(status_code=503, detail=f"DB missing: {p}")
-        if not p.parent.exists():
-            p.parent.mkdir(parents=True, exist_ok=True)
 
         return {"status": "ready", "db": "sqlite", "path": str(p)}
 
@@ -234,8 +246,4 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     return app
 
 
-# IMPORTANT:
-# Do NOT special-case pytest here.
-# Your suite imports `from api.main import app` in multiple places and expects auth behavior to follow env defaults.
 app = build_app()
-
