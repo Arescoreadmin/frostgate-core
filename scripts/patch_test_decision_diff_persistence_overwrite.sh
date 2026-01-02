@@ -1,3 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+FILE="${1:-backend/tests/test_decision_diff_persistence.py}"
+[[ -f "$FILE" ]] || { echo "ERROR: Missing file: $FILE" >&2; exit 1; }
+
+ts="$(date +%Y%m%d_%H%M%S)"
+cp -a "$FILE" "${FILE}.bak.${ts}"
+echo "Backup: ${FILE}.bak.${ts}"
+
+cat > "$FILE" <<'PY'
 import os
 import pytest
 from fastapi.testclient import TestClient
@@ -48,18 +59,7 @@ def test_decision_diff_is_persisted_and_surfaced(tmp_path):
             assert len(changes) >= 1, f"diff.changes empty: diff={diff}"
 
             # Make sure it’s meaningful: threat/decision/score change
-            # Make sure it’s meaningful: threat/decision/score change
-            # changes may be ["field", ...] OR [{"field": "field", ...}, ...]
-            fields = set()
-            for c in changes:
-                if isinstance(c, str):
-                    fields.add(c)
-                elif isinstance(c, dict):
-                    # tolerate multiple schemas
-                    f = c.get("field") or c.get("name") or c.get("key")
-                    if f:
-                        fields.add(str(f))
-
+            fields = set(changes)
             assert ({"threat_level", "decision", "score"} & fields), f"diff not meaningful: fields={fields}, diff={diff}"
     finally:
         for k, v in old.items():
@@ -67,3 +67,7 @@ def test_decision_diff_is_persisted_and_surfaced(tmp_path):
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
+PY
+
+python -m py_compile "$FILE"
+echo "✅ Patched + compiled: $FILE"

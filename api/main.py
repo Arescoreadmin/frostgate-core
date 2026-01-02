@@ -46,9 +46,12 @@ def _resolve_auth_enabled_from_env() -> bool:
 
 
 def _resolve_auth_override(auth_enabled: Optional[bool]) -> bool:
-    if auth_enabled is not None:
-        return bool(auth_enabled)
-    return _resolve_auth_enabled_from_env()
+    """Explicit arg wins, always.
+    Env is only used when auth_enabled is None.
+    """
+    if auth_enabled is None:
+        return _resolve_auth_enabled_from_env()
+    return bool(auth_enabled)
 
 
 def _resolve_sqlite_path() -> Path:
@@ -87,7 +90,8 @@ def _dev_enabled() -> bool:
 
 
 def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
-    resolved_auth_enabled = _resolve_auth_override(auth_enabled)
+    # Resolve ONCE. Explicit argument always wins over env.
+    resolved_auth_enabled = (auth_enabled if auth_enabled is not None else _resolve_auth_enabled_from_env())
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
