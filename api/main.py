@@ -90,8 +90,10 @@ def _dev_enabled() -> bool:
 
 
 def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
-    # Resolve ONCE. Explicit argument always wins over env.
-    resolved_auth_enabled = (auth_enabled if auth_enabled is not None else _resolve_auth_enabled_from_env())
+    # Explicit param wins. Env only used when param is None.
+    resolved_auth_enabled = (
+        _resolve_auth_enabled_from_env() if auth_enabled is None else bool(auth_enabled)
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -111,9 +113,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         yield
 
     app = FastAPI(title="frostgate-core", version="0.1.0", lifespan=lifespan)
+    # auth_enabled precedence: explicit param wins; else env/default logic inside module
+    app.state.auth_enabled = resolved_auth_enabled
+
 
     # Frozen state
-    app.state.auth_enabled = bool(resolved_auth_enabled)
     app.state.service = os.getenv("FG_SERVICE", "frostgate-core")
     app.state.env = os.getenv("FG_ENV", "dev")
     app.state.app_instance_id = str(uuid.uuid4())

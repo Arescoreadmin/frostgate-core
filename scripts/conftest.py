@@ -17,7 +17,7 @@ def base_url() -> str:
 @pytest.fixture(scope="session")
 def api_key() -> str:
     # prefer FG_API_KEY, fallback to API_KEY
-    v = _env("FG_API_KEY") or _env("API_KEY") or "demo_key_change_me"
+    v = _env("FG_API_KEY") or _env("API_KEY") or "supersecret"
     return v
 
 @pytest.fixture(scope="session")

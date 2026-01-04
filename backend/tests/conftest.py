@@ -1,19 +1,20 @@
-"""Test configuration for Frostgate backend."""
-
 from __future__ import annotations
 
-import sys
+import pytest
 from pathlib import Path
 
-import pytest
-
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+from tests._harness import build_app_factory
 
 
 @pytest.fixture
-def anyio_backend() -> str:
-    """Force pytest-anyio to run using asyncio only."""
-
+def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture
+def build_app(tmp_path: Path):
+    """
+    Fixture returns a callable:
+        app = build_app(auth_enabled=True, api_key="supersecret", dev_events_enabled=True)
+    """
+    return build_app_factory(tmp_path)

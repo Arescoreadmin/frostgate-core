@@ -35,7 +35,7 @@ commit="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
   echo '```bash'
   echo "FG_ENV=${FG_ENV:-dev}"
   echo "FG_AUTH_ENABLED=${FG_AUTH_ENABLED:-1}"
-  echo "FG_API_KEY=${FG_API_KEY:-demo_key_change_me}"
+  echo "FG_API_KEY=${FG_API_KEY:-supersecret}"
   echo "FG_SQLITE_PATH=${FG_SQLITE_PATH:-$ROOT/state/frostgate.db}"
   echo '```'
   echo

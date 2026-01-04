@@ -17,3 +17,11 @@ include = ["api*", "engine*", "agent*", "scripts*"]
 
 [project.scripts]
 fg-mint-key = "scripts.mint_api_key:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "backend/tests"]
+norecursedirs = [".venv", "artifacts", "state"]
+markers = [
+  "e2e_http: HTTP e2e tests against a running server",
+]
+

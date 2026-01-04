@@ -15,8 +15,10 @@ def build_app(auth_enabled: bool):
       - Drop any cached `api.*` modules
       - Re-import api.config and api.main so `settings` sees the new env
     """
-    # Control env
+    # Control env (pin both knobs; FG_AUTH_ENABLED overrides FG_API_KEY in app logic)
     os.environ.pop("FG_API_KEY", None)
+    os.environ.pop("FG_AUTH_ENABLED", None)
+    os.environ["FG_AUTH_ENABLED"] = "1" if auth_enabled else "0"
     if auth_enabled:
         os.environ["FG_API_KEY"] = "supersecret"
 

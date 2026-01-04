@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 
 source .venv/bin/activate
 export FG_AUTH_ENABLED="${FG_AUTH_ENABLED:-true}"
-export FG_API_KEY="${FG_API_KEY:-demo_key_change_me}"
+export FG_API_KEY="${FG_API_KEY:-supersecret}"
 export FG_STATE_DIR="${FG_STATE_DIR:-$PWD/state}"
 export FG_SQLITE_PATH="${FG_SQLITE_PATH:-$FG_STATE_DIR/frostgate.db}"
 mkdir -p "$FG_STATE_DIR"
