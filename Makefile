@@ -151,22 +151,15 @@ fg-logs:
 
 fg-ready:
 	@set -euo pipefail; \
-	timeout=30; \
-	for _ in $$(seq 1 $$timeout); do \
-		if curl -fsS "$(BASE_URL)/health/ready" >/dev/null 2>&1; then \
-			echo "✅ /health/ready OK"; exit 0; \
-		fi; \
-		sleep 1; \
-	done; \
-	echo "❌ Timed out waiting for /health/ready"; \
-	test -f "$(FG_LOGFILE)" && tail -n 80 "$(FG_LOGFILE)" || true; \
-	exit 1
+	./scripts/uvicorn_local.sh check
 
 fg-health:
 	curl -fsS "$(BASE_URL)/health" | $(PY) -m json.tool
 
 fg-seed:
-	curl -fsS -X POST -H "x-api-key: $(FG_API_KEY)" "$(BASE_URL)/dev/seed" | $(PY) -m json.tool
+	@set -euo pipefail; \
+	curl -fsS -X POST -H "x-api-key: $(FG_API_KEY)" "$(BASE_URL)/dev/seed" | $(PY) -m json.tool >/dev/null; \
+	echo "✅ seeded"
 
 fg-status:
 	@set -euo pipefail; \
@@ -199,33 +192,36 @@ fg-test: fg-fast
 # HTTP E2E: manage server lifecycle locally, then run only e2e_http tests
 .PHONY: fg-e2e-local
 fg-e2e-local: fg-fast
-	@set -euo pipefail; \
-	mkdir -p "$(PWD)/artifacts" "state"; \
+	@bash -lc 'set -euo pipefail; \
+	mkdir -p "$(PWD)/artifacts" "$(PWD)/state"; \
 	export FG_ENV=dev; \
 	export FG_SERVICE=frostgate-core; \
 	export FG_AUTH_ENABLED=1; \
 	export FG_API_KEY=supersecret; \
 	export FG_ENFORCEMENT_MODE=observe; \
 	export FG_STATE_DIR="$(PWD)/artifacts"; \
-	export FG_SQLITE_PATH="$(PWD)/artifacts/frostgate.db"; \
+	export FG_SQLITE_PATH="$(PWD)/artifacts/frostgate.e2e.db"; \
 	export FG_DEV_EVENTS_ENABLED=1; \
 	export FG_BASE_URL=http://127.0.0.1:8000; \
 	export FG_HOST=127.0.0.1; \
 	export FG_PORT=8000; \
 	export BASE_URL=http://127.0.0.1:8000; \
 	export API_KEY=supersecret; \
-	export FG_STRICT_START="$${FG_STRICT_START:-0}"; \
-	export FG_RESTART_IF_RUNNING="$${FG_RESTART_IF_RUNNING:-1}"; \
-	export FG_READY_REQUIRED="$${FG_READY_REQUIRED:-1}"; \
-	trap './scripts/uvicorn_local.sh stop >/dev/null 2>&1 || true' EXIT; \
+	export FG_STRICT_START=0; \
+	export FG_RESTART_IF_RUNNING=1; \
+	export FG_READY_REQUIRED=$${FG_READY_REQUIRED:-1}; \
+	trap "./scripts/uvicorn_local.sh stop >/dev/null 2>&1 || true" EXIT; \
 	./scripts/uvicorn_local.sh start; \
+	./scripts/uvicorn_local.sh openapi; \
 	$(MAKE) -s fg-ready; \
 	$(MAKE) -s fg-seed; \
-	$(PY) -m pytest -q -m e2e_http
+	$(PY) -m pytest -q -m e2e_http; \
+	'
 
-# Convenience: run e2e_http tests against an already running server
+# Explicitly run http e2e against an already-running server (no start/stop).
 fg-e2e-http:
-	$(PY) -m pytest -q -m e2e_http
+	@$(PY) -m pytest -q -m e2e_http
+
 
 # =============================================================================
 # CI / Guards (keep these opinionated)

@@ -1,23 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# -----------------------------
-# FrostGate uvicorn local runner
-# -----------------------------
-# Guarantees:
-# - No "started" claim until /health responds
-# - Optional /health/ready gating (configurable)
-# - Stale pidfile cleanup
-# - Refuses to start if port is owned by another process (unless FG_FORCE=1)
-# - Stop waits for port to free (prevents ghost server failures)
-# - "env" prints launch-relevant env values and best-effort process env
-# - "openapi" uses a temp file (no SIGPIPE curl(23) nonsense)
-#
-# New knobs (because reality is messy):
-# - FG_RESTART_IF_RUNNING=1  => start() will stop+start if already running (useful for e2e)
-# - FG_READY_REQUIRED=1      => start/check requires /health/ready == 200 (default)
-# - FG_READY_REQUIRED=0      => /health required, /ready informational only
-
 HOST="${FG_HOST:-127.0.0.1}"
 PORT="${FG_PORT:-8000}"
 
@@ -73,7 +56,7 @@ _port_owner_pid() {
 }
 
 _wait_for_port_free() {
-  local deadline_ms="$((_now_ms + STOP_TIMEOUT_SEC*1000))"
+  local deadline_ms="$(( $(_now_ms) + STOP_TIMEOUT_SEC*1000 ))"
   while (( $(_now_ms) < deadline_ms )); do
     local opid
     opid="$(_port_owner_pid || true)"
@@ -83,10 +66,55 @@ _wait_for_port_free() {
   return 1
 }
 
+_auth_header() {
+  # Returns header value or empty string
+  local auth="${FG_AUTH_ENABLED:-}"
+  local key="${FG_API_KEY:-}"
+  if [[ "${auth}" == "1" && -n "${key}" ]]; then
+    printf 'X-API-Key: %s' "$key"
+  fi
+}
+
+_curl_ok() {
+  local url="$1"
+  local hdr
+  hdr="$(_auth_header || true)"
+  local args=( -fsS )
+  if [[ -n "${hdr:-}" ]]; then
+    args+=( -H "$hdr" )
+  fi
+  args+=( "$url" )
+  curl "${args[@]}" >/dev/null 2>&1
+}
+
+_curl_code() {
+  local url="$1"
+  local hdr
+  hdr="$(_auth_header || true)"
+  local args=( -sS -o /dev/null -w "%{http_code}" )
+  if [[ -n "${hdr:-}" ]]; then
+    args+=( -H "$hdr" )
+  fi
+  args+=( "$url" )
+  curl "${args[@]}" || true
+}
+
+_curl_body() {
+  local url="$1"
+  local hdr
+  hdr="$(_auth_header || true)"
+  local args=( -sS )
+  if [[ -n "${hdr:-}" ]]; then
+    args+=( -H "$hdr" )
+  fi
+  args+=( "$url" )
+  curl "${args[@]}" || true
+}
+
 _wait_for_health() {
-  local deadline_ms="$((_now_ms + START_TIMEOUT_SEC*1000))"
+  local deadline_ms="$(( $(_now_ms) + START_TIMEOUT_SEC*1000 ))"
   while (( $(_now_ms) < deadline_ms )); do
-    if curl -fsS "${BASE_URL}${HEALTH_PATH}" >/dev/null 2>&1; then
+    if _curl_ok "${BASE_URL}${HEALTH_PATH}"; then
       echo "✅ ${HEALTH_PATH} is up at ${BASE_URL}"
       return 0
     fi
@@ -99,16 +127,11 @@ _wait_for_health() {
   return 1
 }
 
-_ready_code() {
-  curl -sS -o /dev/null -w "%{http_code}" "${BASE_URL}${READY_PATH}" || true
-}
-
-_ready_body() {
-  curl -sS "${BASE_URL}${READY_PATH}" || true
-}
+_ready_code() { _curl_code "${BASE_URL}${READY_PATH}"; }
+_ready_body() { _curl_body "${BASE_URL}${READY_PATH}"; }
 
 _wait_for_ready_200() {
-  local deadline_ms="$((_now_ms + READY_TIMEOUT_SEC*1000))"
+  local deadline_ms="$(( $(_now_ms) + READY_TIMEOUT_SEC*1000 ))"
   while (( $(_now_ms) < deadline_ms )); do
     local code
     code="$(_ready_code)"
@@ -160,14 +183,9 @@ is_running() {
 }
 
 _precreate_sqlite_file() {
-  # Your readiness check is "DB missing: <path>".
-  # So we make sure the file exists before startup when FG_SQLITE_PATH is set.
   local p="${FG_SQLITE_PATH:-}"
   [[ -z "${p:-}" ]] && return 0
-  # Normalize ./foo.db -> foo.db is fine; dirname works either way.
-  local d
-  d="$(dirname "$p")"
-  mkdir -p "$d" 2>/dev/null || true
+  mkdir -p "$(dirname "$p")" 2>/dev/null || true
   touch "$p" 2>/dev/null || true
 }
 
@@ -181,7 +199,7 @@ start() {
     fi
 
     if [[ "$RESTART_IF_RUNNING" == "1" ]]; then
-      echo "⚠️  uvicorn already running (pid=$(_read_pidfile)); FG_RESTART_IF_RUNNING=1 so restarting to apply env"
+      echo "⚠️  uvicorn already running (pid=$(_read_pidfile)); restarting to apply env"
       stop
     else
       echo "✅ uvicorn already running (pid=$(_read_pidfile))"
@@ -207,7 +225,6 @@ start() {
   fi
 
   rm -f "$PIDFILE"
-
   _precreate_sqlite_file
 
   nohup "$PY" -m uvicorn "$APP" --host "$HOST" --port "$PORT" >"$LOGFILE" 2>&1 &
@@ -244,7 +261,7 @@ stop() {
     kill "$pid" 2>/dev/null || true
   fi
 
-  local deadline_ms="$((_now_ms + STOP_TIMEOUT_SEC*1000))"
+  local deadline_ms="$(( $(_now_ms) + STOP_TIMEOUT_SEC*1000 ))"
   while (( $(_now_ms) < deadline_ms )); do
     if ! _pid_alive "$pid"; then
       break
@@ -274,10 +291,7 @@ stop() {
   return 0
 }
 
-restart() {
-  stop
-  start
-}
+restart() { stop; start; }
 
 status() {
   if is_running; then
@@ -288,9 +302,7 @@ status() {
   exit 1
 }
 
-logs() {
-  tail -n "${1:-200}" "$LOGFILE"
-}
+logs() { tail -n "${1:-200}" "$LOGFILE"; }
 
 openapi_check() {
   local tmp
@@ -338,8 +350,6 @@ FG_STRICT_START=${STRICT}
 FG_FORCE=${FORCE}
 FG_READY_REQUIRED=${READY_REQUIRED}
 FG_RESTART_IF_RUNNING=${RESTART_IF_RUNNING}
-API_KEY=${API_KEY:-}
-BASE_URL=${BASE_URL}
 EOF
 
   if [[ -r "/proc/$pid/environ" ]]; then
@@ -351,7 +361,7 @@ EOF
 }
 
 server_check() {
-  if ! curl -fsS "${BASE_URL}${HEALTH_PATH}" >/dev/null; then
+  if ! _curl_ok "${BASE_URL}${HEALTH_PATH}"; then
     echo "❌ ${HEALTH_PATH} not reachable at ${BASE_URL}" >&2
     echo "---- last logs ----" >&2
     tail -n 120 "$LOGFILE" 2>/dev/null || true
