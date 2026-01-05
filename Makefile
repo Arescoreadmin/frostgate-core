@@ -278,7 +278,6 @@ test: fg-test
 .PHONY: fg-ui-sse
 fg-ui-sse:
 	./scripts/apply_ui_sse_everything.sh || true
-
 .PHONY: fg-ui-sse-smoke
 fg-ui-sse-smoke:
 	FG_NO_OPEN=1 ./scripts/apply_ui_sse_everything.sh >/dev/null 2>&1 || true

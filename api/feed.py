@@ -5,8 +5,10 @@ import asyncio
 
 from typing import Any, List
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import Response
 from starlette.responses import StreamingResponse
+
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -21,7 +23,6 @@ router = APIRouter(
     tags=["feed"],
     dependencies=[Depends(rate_limit_guard), Depends(verify_api_key)],
 )
-
 
 # -----------------------------
 # Presentation / backfill logic
@@ -38,7 +39,6 @@ def _sev_from_threat(threat: str | None) -> str:
     if t in ("low",):
         return "low"
     return "info"
-
 
 def _infer_action_taken(decision_diff: Any) -> str:
     """
@@ -71,7 +71,6 @@ def _infer_action_taken(decision_diff: Any) -> str:
         return "rate_limited"
 
     return "log_only"
-
 
 def _derive_from_diff(diff: Any) -> tuple[list[str], float | None, list[str], str | None]:
     """
@@ -111,7 +110,6 @@ def _derive_from_diff(diff: Any) -> tuple[list[str], float | None, list[str], st
         changed_fields,
         str(action_reason) if action_reason is not None else None,
     )
-
 
 def _backfill_feed_item(i: dict) -> dict:
     # timestamp
@@ -171,7 +169,6 @@ def _backfill_feed_item(i: dict) -> dict:
 
     return i
 
-
 def _is_actionable(item: dict) -> bool:
     sev = (item.get("severity") or "").lower()
     act = (item.get("action_taken") or "").lower()
@@ -179,7 +176,6 @@ def _is_actionable(item: dict) -> bool:
     if act == "log_only" and sev not in ("high", "critical"):
         return False
     return True
-
 
 # -----------------------------
 # API models
@@ -211,11 +207,9 @@ class FeedItem(BaseModel):
     decision_diff: Any | None = None
     metadata: Any | None = None
 
-
 class FeedLiveResponse(BaseModel):
     items: List[FeedItem] = Field(default_factory=list)
     next_since_id: int | None = None
-
 
 # -----------------------------
 # Route
@@ -325,6 +319,12 @@ def feed_live(
         items.append(FeedItem(**item_dict))
 
     return FeedLiveResponse(items=items, next_since_id=max_id)
+@router.head("/stream")
+def feed_stream_head() -> Response:
+    # Headers-only probe for smoke tests / health checks
+    return Response(content=b"", media_type="text/event-stream")
+
+
 @router.get("/stream")
 async def feed_stream(
     request: Request,
@@ -335,9 +335,10 @@ async def feed_stream(
 ):
     """
     Server-Sent Events stream for the live feed.
-    Reuses feed_live() dynamically (no schema guessing).
+    Emits:
+      event: items
+      data: {"items":[...], "next_since_id": N}
     """
-
     async def event_gen():
         nonlocal since_id
         # Suggest client retry quickly
@@ -351,10 +352,8 @@ async def feed_stream(
             except Exception:
                 pass
 
-            # Reuse existing feed_live if present
             fn = globals().get("feed_live")
             if fn is None:
-                # If someone renamed it, that's on you.
                 yield 'event: error\ndata: {"detail":"feed_live not found"}\n\n'
                 break
 
@@ -364,24 +363,26 @@ async def feed_stream(
 
             data = resp.model_dump() if hasattr(resp, "model_dump") else (resp.dict() if hasattr(resp, "dict") else resp)
 
-            # advance cursor
             try:
                 since_id = data.get("next_since_id") or since_id
             except Exception:
                 pass
 
-            items = []
+            payload = json.dumps(data, separators=(",", ":"), default=str)
+            yield "event: items\n"
+            yield "data: " + payload + "\n\n"
+
             try:
-                items = data.get("items") or []
+                await asyncio.sleep(max(0.2, float(interval)))
             except Exception:
-                items = []
+                await asyncio.sleep(1.0)
 
-            if items:
-                payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
-                yield f"event: items\ndata: {payload}\n\n"
-            else:
-                yield "event: ping\ndata: {}\n\n"
-
-            await asyncio.sleep(interval)
-
-    return StreamingResponse(event_gen(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )

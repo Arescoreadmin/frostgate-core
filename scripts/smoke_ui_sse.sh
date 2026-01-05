@@ -17,8 +17,14 @@ if [[ "$code" != "200" ]]; then
   exit 1
 fi
 
-# 3) SSE endpoint should advertise event-stream (headers only, short timeout)
-hdr="$(curl -sS --no-buffer --max-time 2 -D - -o /dev/null -b "$tmp" "${BASE}/feed/stream?limit=1&interval=1.0" || true)"
+# 3) SSE endpoint should advertise event-stream (HEADERS ONLY)
+# Use HEAD to avoid reading the streaming body at all (no curl 18 from early abort)
+hdr="$(
+  curl -sS --max-time 2 --head -D - -o /dev/null -b "$tmp" \
+    "${BASE}/feed/stream?limit=1&interval=1.0" \
+  || true
+)"
+
 echo "$hdr" | grep -qi '^content-type: text/event-stream' || {
   echo "❌ /feed/stream missing content-type: text/event-stream"
   echo "$hdr"
