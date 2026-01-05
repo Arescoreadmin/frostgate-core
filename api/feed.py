@@ -319,6 +319,7 @@ def feed_live(
         items.append(FeedItem(**item_dict))
 
     return FeedLiveResponse(items=items, next_since_id=max_id)
+# === STREAM BEGIN (do not patch with regex) ===
 @router.head("/stream")
 def feed_stream_head() -> Response:
     # Headers-only probe for smoke tests / health checks
@@ -386,3 +387,5 @@ async def feed_stream(
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+# === STREAM END ===
