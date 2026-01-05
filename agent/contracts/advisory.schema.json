@@ -1,0 +1,7 @@
+{
+  "window": {"start": "...", "end": "..."},
+  "risk_trend": {"slope": 0.0, "direction": "flat|up|down"},
+  "anomaly_flags": [{"type": "spike|novelty|burst", "key": "ip|rule|event_type", "detail": "..."}],
+  "suggested_rules": [{"name": "...", "rationale": "...", "confidence": 0.0, "draft_rule": {}}],
+  "evidence": [{"decision_id": "...", "why": "..."}]
+}
