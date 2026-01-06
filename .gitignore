@@ -115,3 +115,5 @@ __pycache__/
 minisign.key
 minisign.pub
 CONTEXT_SNAPSHOT.md
+scripts/_scratch/
+scripts/_scratch/*

@@ -10,7 +10,6 @@ from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from starlette.responses import Response as StarletteResponse
 
 from api.db import init_db
 from api.decisions import router as decisions_router
@@ -19,6 +18,9 @@ from api.dev_events import router as dev_events_router
 from api.feed import router as feed_router
 from api.stats import router as stats_router
 from api.ui import router as ui_router
+
+# ✅ NEW: dedicated middleware module (you created this)
+from api.middleware.auth_gate import AuthGateMiddleware, AuthGateConfig
 
 log = logging.getLogger("frostgate")
 
@@ -75,6 +77,43 @@ def _dev_enabled() -> bool:
     return (os.getenv("FG_DEV_EVENTS_ENABLED") or "0").strip() == "1"
 
 
+class FGExceptionShieldMiddleware:
+    """
+    ASGI middleware that converts HTTPException (and ExceptionGroup containing one)
+    into a clean JSON response instead of a 500.
+
+    Keep this. It prevents 'middleware raised HTTPException => ExceptionGroup => 500' regressions
+    elsewhere in the stack.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await self.app(scope, receive, send)
+        except HTTPException as e:
+            resp = JSONResponse(
+                status_code=e.status_code,
+                content={"detail": getattr(e, "detail", str(e))},
+            )
+            await resp(scope, receive, send)
+        except ExceptionGroup as eg:  # py3.11+
+            http_exc = None
+            for ex in eg.exceptions:
+                if isinstance(ex, HTTPException):
+                    http_exc = ex
+                    break
+            if http_exc is not None:
+                resp = JSONResponse(
+                    status_code=http_exc.status_code,
+                    content={"detail": getattr(http_exc, "detail", str(http_exc))},
+                )
+                await resp(scope, receive, send)
+            else:
+                raise
+
+
 def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     resolved_auth_enabled = (
         _resolve_auth_enabled_from_env() if auth_enabled is None else bool(auth_enabled)
@@ -83,7 +122,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         try:
-            # If sqlite mode, ensure dir exists BEFORE init_db()
+            # sqlite mode: ensure dir exists BEFORE init_db()
             if not os.getenv("FG_DB_URL"):
                 p = _resolve_sqlite_path()
                 p.parent.mkdir(parents=True, exist_ok=True)
@@ -99,6 +138,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     app = FastAPI(title="frostgate-core", version="0.1.0", lifespan=lifespan)
 
+    # ✅ Shield first (outermost): ensures HTTPException never becomes a 500 taskgroup circus
+    app.add_middleware(FGExceptionShieldMiddleware)
+
     # Frozen state
     app.state.auth_enabled = bool(resolved_auth_enabled)
     app.state.service = os.getenv("FG_SERVICE", "frostgate-core")
@@ -111,8 +153,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         raise HTTPException(status_code=401, detail=detail)
 
     def _hdr(req: Request, name: str) -> Optional[str]:
-        # Starlette headers are case-insensitive
-        v = req.headers.get(name)
+        v = req.headers.get(name)  # headers are case-insensitive
         return str(v).strip() if v and str(v).strip() else None
 
     def check_tenant_if_present(req: Request) -> None:
@@ -127,7 +168,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         api_key = _hdr(req, "X-API-Key")
 
-        # ✅ Cookie fallback for UI/curl -b flows
+        # Cookie fallback (UI / curl -b flows)
         if not api_key:
             ck = req.cookies.get(UI_COOKIE_NAME)
             api_key = str(ck).strip() if ck and str(ck).strip() else None
@@ -166,7 +207,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         api_key = _hdr(req, "X-API-Key")
 
-        # ✅ Cookie fallback for UI/curl -b flows
+        # Cookie fallback (UI / curl -b flows)
         if not api_key:
             ck = req.cookies.get(UI_COOKIE_NAME)
             api_key = str(ck).strip() if ck and str(ck).strip() else None
@@ -177,48 +218,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         if str(api_key) != str(_global_expected_api_key()):
             _fail()
 
-    def _norm_path(path: str) -> str:
-        """
-        Normalize paths so:
-          /ui/token/  == /ui/token
-          ""          -> /
-        This prevents the global gate from “missing” allowlisted endpoints.
-        """
-        p = (path or "").strip()
-        if not p:
-            return "/"
-        if p != "/":
-            p = p.rstrip("/")
-            if not p:
-                p = "/"
-        return p
-
-    def _is_public_path(path: str) -> bool:
-        p = _norm_path(path)
-
-        # Health is always public
-        if p in {"/health", "/health/live", "/health/ready"}:
-            return True
-
-        # OpenAPI + docs (optional public)
-        if p in {"/openapi.json", "/docs", "/redoc"}:
-            return True
-        if p.startswith("/docs/"):
-            return True
-        if p.startswith("/redoc"):
-            return True
-
-        # Dev UI bootstrap must not be blocked before router sees it.
-        # You already gate it inside api/ui.py via FG_UI_TOKEN_GET_ENABLED.
-        if p == "/ui/token":
-            return True
-
-        # If you ever serve static under /ui/static, allow it here.
-        if p.startswith("/ui/static/"):
-            return True
-
-        return False
-
     # ---- Compatibility shim ----
     # Some older modules import require_status_auth from api.auth.
     try:
@@ -228,20 +227,23 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     except Exception:
         pass
 
-    # ---- Global auth middleware (the thing that was silently murdering /ui/token) ----
-    @app.middleware("http")
-    async def global_auth_gate(request: Request, call_next) -> StarletteResponse:
-        p = _norm_path(request.url.path)
-        public = _is_public_path(p)
-
-        if not public:
-            require_status_auth(request)
-
-        resp = await call_next(request)
-        # Debug headers: prove what the gate decided
-        resp.headers["X-FG-GATE"] = "public" if public else "protected"
-        resp.headers["X-FG-PATH"] = p
-        return resp
+    # ✅ NEW: register the real auth gate middleware here (and ONLY here)
+    app.add_middleware(
+        AuthGateMiddleware,
+        require_status_auth=require_status_auth,
+        config=AuthGateConfig(
+            public_paths=(
+                "/health",
+                "/health/live",
+                "/health/ready",
+                "/ui/token",
+                # optional docs exposure:
+                "/openapi.json",
+                "/docs",
+                "/redoc",
+            )
+        ),
+    )
 
     # ---- Routers ----
     app.include_router(defend_router)
@@ -250,7 +252,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(decisions_router)
     app.include_router(stats_router)
     app.include_router(ui_router)
-
     if _dev_enabled():
         app.include_router(dev_events_router)
 
@@ -329,11 +330,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         return result
 
-    # ---- Debug: route map (stable shape, jq-proof) ----
+    # ---- Debug: route map ----
     @app.get("/_debug/routes")
     async def debug_routes(request: Request) -> dict:
         try:
-            # protected: must pass global gate anyway, but keep explicit
             require_status_auth(request)
 
             out = []

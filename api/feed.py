@@ -1,5 +1,61 @@
 from __future__ import annotations
 
+from fastapi.responses import StreamingResponse
+
+import time
+
+
+# -----------------------------------------------------------------------------
+# Query-param normalization helpers
+# (prevents empty-string filters + Query(None) objects from leaking into SQL binds)
+
+def _fg_is_query_obj(v) -> bool:
+    try:
+        return v.__class__.__name__ == "Query"
+    except Exception:
+        return False
+
+def _fg_coerce_query_default(v):
+    if _fg_is_query_obj(v):
+        try:
+            return v.default
+        except Exception:
+            return None
+    return v
+
+def _fg_norm_str(v):
+    v = _fg_coerce_query_default(v)
+    if v is None:
+        return None
+    try:
+        v = str(v)
+    except Exception:
+        return None
+    v = v.strip()
+    return v if v else None
+
+def _fg_norm_int(v):
+    v = _fg_coerce_query_default(v)
+    if v is None or v == "":
+        return None
+    try:
+        return int(v)
+    except Exception:
+        return None
+
+def _fg_norm_bool(v):
+    v = _fg_coerce_query_default(v)
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return v
+    sv = str(v).strip().lower()
+    if sv in ("1","true","t","yes","y","on"):
+        return True
+    if sv in ("0","false","f","no","n","off"):
+        return False
+    return None
+
 import json
 import asyncio
 
@@ -235,6 +291,16 @@ def feed_live(
     only_changed: bool = Query(default=False),
     only_actionable: bool = Query(default=False),
 ):
+    # --- normalization guardrails (prevents blank-feed illusions + Query(None) SQL binds) ---
+    since_id = _fg_norm_int(since_id)
+    limit = _fg_norm_int(limit) or limit
+    threat_level = _fg_norm_str(threat_level)
+    source = _fg_norm_str(source)
+    tenant_id = _fg_norm_str(tenant_id)
+    q = _fg_norm_str(q)
+    only_changed = _fg_norm_bool(only_changed)
+    only_actionable = _fg_norm_bool(only_actionable)
+    # --- end normalization guardrails ---
     qry = db.query(DecisionRecord)
 
     # alias: severity -> threat_level (DB only has threat_level)
@@ -330,62 +396,102 @@ def feed_stream_head() -> Response:
 async def feed_stream(
     request: Request,
     db: Session = Depends(get_db),
-    since_id: int | None = None,
-    limit: int = 50,
-    interval: float = 1.0,
+
+    # pacing
+    interval: float = Query(default=1.0, ge=0.2, le=10.0),
+    heartbeat: float = Query(default=10.0, ge=2.0, le=60.0),
+
+    # pagination/incremental
+    limit: int = Query(default=50, ge=1, le=200),
+    since_id: int | None = Query(default=None, ge=0),
+
+    # filters (severity is an alias for threat_level)
+    severity: str | None = Query(default=None),
+    threat_level: str | None = Query(default=None),
+    action_taken: str | None = Query(default=None),
+    source: str | None = Query(default=None),
+    tenant_id: str | None = Query(default=None),
+    q: str | None = Query(default=None, description="search event_type/event_id/source"),
+
+    # toggles
+    only_changed: bool = Query(default=False),
+    only_actionable: bool = Query(default=False),
 ):
     """
-    Server-Sent Events stream for the live feed.
-    Emits:
-      event: items
-      data: {"items":[...], "next_since_id": N}
+    Production SSE endpoint:
+      - never throws inside generator (prevents 500 'Internal Server Error')
+      - emits batches as JSON: {"items":[...], "next_since_id": N}
+      - heartbeat ': ping' comments keep proxies happy
+      - reuses feed_live() for filtering consistency
     """
-    async def event_gen():
-        nonlocal since_id
-        # Suggest client retry quickly
-        yield "retry: 1000\n\n"
+    def _ns(v: str | None) -> str | None:
+        if v is None:
+            return None
+        v2 = str(v).strip()
+        return v2 if v2 else None
+
+    severity = _ns(severity)
+    threat_level = _ns(threat_level)
+    action_taken = _ns(action_taken)
+    source = _ns(source)
+    tenant_id = _ns(tenant_id)
+    q = _ns(q)
+
+    if severity and not threat_level:
+        threat_level = severity
+
+    async def gen():
+        last_id = since_id
+        last_hb = time.monotonic()
+        yield ": connected\n\n"
 
         while True:
-            # disconnect detection (best effort)
             try:
                 if await request.is_disconnected():
                     break
-            except Exception:
-                pass
 
-            fn = globals().get("feed_live")
-            if fn is None:
-                yield 'event: error\ndata: {"detail":"feed_live not found"}\n\n'
+                resp = feed_live(
+                    db=db,
+                    limit=limit,
+                    since_id=last_id,
+                    severity=severity,
+                    threat_level=threat_level,
+                    action_taken=action_taken,
+                    source=source,
+                    tenant_id=tenant_id,
+                    q=q,
+                    only_changed=only_changed,
+                    only_actionable=only_actionable,
+                )
+
+                payload = {
+                    "items": [item.model_dump() for item in resp.items],
+                    "next_since_id": resp.next_since_id,
+                }
+
+                if resp.next_since_id is not None:
+                    last_id = resp.next_since_id
+                elif resp.items:
+                    try:
+                        last_id = max(int(it.id) for it in resp.items if it.id is not None)
+                    except Exception:
+                        pass
+
+                yield "data: " + json.dumps(payload, separators=(",", ":"), ensure_ascii=False) + "\n\n"
+
+                now = time.monotonic()
+                if now - last_hb >= heartbeat:
+                    last_hb = now
+                    yield ": ping\n\n"
+
+            except asyncio.CancelledError:
                 break
-
-            resp = fn(db=db, since_id=since_id, limit=limit)
-            if hasattr(resp, "__await__"):
-                resp = await resp
-
-            data = resp.model_dump() if hasattr(resp, "model_dump") else (resp.dict() if hasattr(resp, "dict") else resp)
-
-            try:
-                since_id = data.get("next_since_id") or since_id
             except Exception:
-                pass
+                # never explode the stream; emit a comment and keep going
+                yield ": error\n\n"
 
-            payload = json.dumps(data, separators=(",", ":"), default=str)
-            yield "event: items\n"
-            yield "data: " + payload + "\n\n"
+            await asyncio.sleep(interval)
 
-            try:
-                await asyncio.sleep(max(0.2, float(interval)))
-            except Exception:
-                await asyncio.sleep(1.0)
-
-    return StreamingResponse(
-        event_gen(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-store, max-age=0",
-            "Pragma": "no-cache",
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 # === STREAM END ===

@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+# NOTE:
+# This file used to contain a /ui/feed route. That caused route ambiguity and patch drift.
+# Canonical UI is now in api/ui.py ONLY.
+# Keeping this file as a harmless stub prevents stale imports from exploding.
 
-# Legacy UI: moved OFF /ui to prevent collisions with api/ui.py
-# If this gets mounted by accident, it will not break /ui/token or /ui/feed.
-router = APIRouter(prefix="/_legacy/ui", tags=["legacy-ui"], include_in_schema=False)
+from fastapi import APIRouter
 
+router = APIRouter(prefix="/_legacy/ui_feed", tags=["legacy-ui"], include_in_schema=False)
 
-@router.get("/feed")
-def legacy_ui_feed() -> None:
-    # If you somehow hit this, you’re using the wrong UI implementation.
-    raise HTTPException(
-        status_code=410,
-        detail="Legacy UI removed. Use /ui/feed from api/ui.py.",
-    )
+@router.get("/_disabled", include_in_schema=False)
+def _disabled():
+    return {"status": "disabled", "reason": "use /ui/feed (api/ui.py)"}
