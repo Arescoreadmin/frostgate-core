@@ -25,6 +25,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Sanity check workflow file
+        run: |
+          python - <<'PY'
+          import yaml
+          y=yaml.safe_load(open('.github/workflows/ci.yml'))
+          assert isinstance(y, dict), f'ci.yml must parse to dict, got {type(y)}'
+          assert 'jobs' in y and isinstance(y['jobs'], dict), 'ci.yml missing jobs map'
+          for k in ('unit','integration','evidence'):
+              assert k in y['jobs'], f'missing job: {k}'
+          print('workflow sanity ok')
+          PY
       - name: Install OS deps
         run: |
           sudo apt-get update
@@ -139,7 +150,7 @@ jobs:
       - name: Smoke auth gate (must pass)
         run: |
           chmod +x scripts/smoke_auth.sh
-          FG_BASE_URL="${BASE_URL}" FG_API_KEY="${FG_API_KEY}" ./scripts/smoke_auth.sh
+          BASE_URL="${BASE_URL}" FG_API_KEY="${FG_API_KEY}" ./scripts/smoke_auth.sh
 
       - name: Run integration tests
         run: |
