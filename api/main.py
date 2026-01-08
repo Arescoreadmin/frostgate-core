@@ -14,8 +14,13 @@ from fastapi.responses import JSONResponse
 from api.db import init_db
 from api.decisions import router as decisions_router
 from api.defend import router as defend_router
+from api.forensics import forensics_enabled, router as forensics_router
+from api.governance import governance_enabled, router as governance_router
 from api.dev_events import router as dev_events_router
 from api.feed import router as feed_router
+from api.mission_envelope import mission_envelopes_enabled, router as mission_router
+from api.ring_router import ring_router_enabled, router as ring_router
+from api.roe_engine import roe_engine_enabled, router as roe_router
 from api.stats import router as stats_router
 from api.ui import router as ui_router
 
@@ -253,6 +258,16 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(decisions_router)
     app.include_router(stats_router)
     app.include_router(ui_router)
+    if mission_envelopes_enabled():
+        app.include_router(mission_router)
+    if ring_router_enabled():
+        app.include_router(ring_router)
+    if roe_engine_enabled():
+        app.include_router(roe_router)
+    if forensics_enabled():
+        app.include_router(forensics_router)
+    if governance_enabled():
+        app.include_router(governance_router)
     if _dev_enabled():
         app.include_router(dev_events_router)
 
