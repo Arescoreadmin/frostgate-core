@@ -149,6 +149,7 @@ fg-compile: guard-scripts
 .PHONY: fg-fast
 fg-fast: fg-audit-make fg-contract fg-compile
 	@$(PY) -m pytest -q
+	$(MAKE) fg-lint
 
 # =============================================================================
 # Local server (canonical)
@@ -303,3 +304,11 @@ doctor: guard-scripts
 	@$(MAKE) -s fg-audit-make
 	@$(MAKE) -s test-clean
 	@echo "✅ doctor OK"
+
+# =============================================================================
+# Lint
+# =============================================================================
+.PHONY: fg-lint
+fg-lint:
+	.venv/bin/python -m py_compile api/middleware/auth_gate.py
+	.venv/bin/ruff check api
