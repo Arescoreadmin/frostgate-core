@@ -310,5 +310,7 @@ doctor: guard-scripts
 # =============================================================================
 .PHONY: fg-lint
 fg-lint:
-	.venv/bin/python -m py_compile api/middleware/auth_gate.py
-	.venv/bin/ruff check api
+	@$(PY) -m py_compile api/middleware/auth_gate.py
+	@$(PY) -m ruff check api
+	@$(PY) -m ruff format --check api
+	.venv/bin/python -m ruff format --check api
