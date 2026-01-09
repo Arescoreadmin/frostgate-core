@@ -10,16 +10,13 @@ concurrency:
   group: frostgate-core-ci-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 env:
   PYTHONHASHSEED: "0"
   TZ: "UTC"
 
 jobs:
   unit:
-    name: Unit + Build (no server)
+    name: Unit (fg-fast)
     runs-on: ubuntu-latest
     env:
       FG_ENV: dev
@@ -35,26 +32,22 @@ jobs:
       - name: Install OS deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y ripgrep sqlite3 curl zip minisign
+          sudo apt-get install -y sqlite3 curl zip minisign ripgrep
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
 
       - name: Prepare workspace
         run: |
-          mkdir -p state artifacts keys
+          mkdir -p state artifacts
 
-      - name: Install Python deps (single source of truth)
+      - name: Build venv + deps (Makefile is source of truth)
         run: |
           make venv
 
-      - name: Run unit lane (single source of truth)
+      - name: Run unit lane
         run: |
           make ci
 
@@ -69,7 +62,7 @@ jobs:
           if-no-files-found: ignore
 
   integration:
-    name: Integration (itest-local lane)
+    name: Integration (itest-local)
     runs-on: ubuntu-latest
     needs: unit
     env:
@@ -78,8 +71,10 @@ jobs:
       FG_API_KEY: supersecret
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci-integration.db
+
       ITEST_HOST: 127.0.0.1
       ITEST_PORT: 8001
+      ITEST_WIPE_DB: "1"
 
     steps:
       - name: Checkout
@@ -88,26 +83,22 @@ jobs:
       - name: Install OS deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y ripgrep sqlite3 curl zip minisign
+          sudo apt-get install -y sqlite3 curl zip minisign ripgrep
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
 
       - name: Prepare workspace
         run: |
-          mkdir -p state artifacts keys
+          mkdir -p state artifacts
 
-      - name: Install Python deps (single source of truth)
+      - name: Build venv + deps
         run: |
           make venv
 
-      - name: Run integration lane (single source of truth)
+      - name: Run integration lane
         run: |
           make ci-integration
 
@@ -122,7 +113,7 @@ jobs:
           if-no-files-found: ignore
 
   evidence:
-    name: Evidence Bundle (ci-evidence lane)
+    name: Evidence (ci-evidence)
     runs-on: ubuntu-latest
     needs: integration
     env:
@@ -131,8 +122,11 @@ jobs:
       FG_API_KEY: supersecret
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci-evidence.db
+
       ITEST_HOST: 127.0.0.1
       ITEST_PORT: 8001
+      ITEST_WIPE_DB: "1"
+
       SCENARIO: spike
       MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
       MINISIGN_PUBLIC_KEY: ${{ secrets.MINISIGN_PUBLIC_KEY }}
@@ -144,28 +138,24 @@ jobs:
       - name: Install OS deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y ripgrep sqlite3 curl zip minisign
+          sudo apt-get install -y sqlite3 curl zip minisign ripgrep
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
 
       - name: Prepare workspace
         run: |
           mkdir -p state artifacts keys
 
-      - name: Install Python deps (single source of truth)
+      - name: Build venv + deps
         run: |
           make venv
 
-      - name: Run evidence lane (single source of truth)
+      - name: Run evidence lane (server + smoke + evidence)
         run: |
-          make ci-evidence SCENARIO="${SCENARIO}"
+          make ci-evidence
 
       - name: Verify signature
         run: |
@@ -184,6 +174,7 @@ jobs:
           echo "✅ signature verified"
 
       - name: Upload evidence zip
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: frostgate-evidence-bundle
@@ -191,5 +182,6 @@ jobs:
             artifacts/frostgate_evidence_*.zip
             artifacts/latest_zip*.txt
             artifacts/latest_evidence_dir*.txt
-            artifacts/**/manifest.sha256*
+            artifacts/**
+            state/**
           if-no-files-found: error
