@@ -69,7 +69,9 @@ async def verify_api_key(
 
     raw = _extract_key(request, x_api_key)
     if raw is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing API key")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing API key"
+        )
 
     expected = _get_expected_api_key()
 
@@ -82,7 +84,9 @@ async def verify_api_key(
         auth_scopes.verify_api_key_raw(raw, required_scopes=None)
         return
     except HTTPException:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key"
+        )
 
 
 def require_status_auth(

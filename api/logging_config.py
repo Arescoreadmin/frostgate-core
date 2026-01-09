@@ -20,7 +20,7 @@ def configure_logging() -> None:
     logger.add(
         sys.stdout,
         level=log_level,
-        serialize=True,        # JSON output
+        serialize=True,  # JSON output
         backtrace=False,
         diagnose=False,
     )

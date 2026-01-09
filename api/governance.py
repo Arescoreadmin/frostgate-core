@@ -86,7 +86,9 @@ async def create_change(req: PolicyChangeCreate) -> PolicyChangeRequest:
 
 
 @router.post("/changes/{change_id}/approve", response_model=PolicyChangeRequest)
-async def approve_change(change_id: str, req: PolicyApprovalRequest) -> PolicyChangeRequest:
+async def approve_change(
+    change_id: str, req: PolicyApprovalRequest
+) -> PolicyChangeRequest:
     change = _CHANGE_REQUESTS.get(change_id)
     if change is None:
         raise HTTPException(status_code=404, detail="Change request not found")

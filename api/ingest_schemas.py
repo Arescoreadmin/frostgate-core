@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 
+
 class IngestResponse(BaseModel):
     status: str = "ok"
     event_id: str

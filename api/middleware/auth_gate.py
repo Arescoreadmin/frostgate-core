@@ -40,7 +40,9 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app,
-        require_status_auth: Callable[[Request], None],  # kept for main.py compatibility, ignored on purpose
+        require_status_auth: Callable[
+            [Request], None
+        ],  # kept for main.py compatibility, ignored on purpose
         config: Optional[AuthGateConfig] = None,
     ):
         super().__init__(app)

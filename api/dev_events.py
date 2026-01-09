@@ -22,6 +22,7 @@ router = APIRouter(
 # Helpers
 # -----------------------------
 
+
 def _dev_enabled() -> bool:
     # Hard gate: never ship this enabled by accident
     return os.getenv("FG_DEV_EVENTS_ENABLED", "0").strip() == "1"
@@ -88,7 +89,11 @@ def _make_record(
     Returns (event_id, DecisionRecord).
     If stable_key is provided, event_id is deterministic across runs.
     """
-    base_anom = 0.0 if threat_level == "none" else (0.9 if threat_level in ("critical", "high") else 0.6)
+    base_anom = (
+        0.0
+        if threat_level == "none"
+        else (0.9 if threat_level in ("critical", "high") else 0.6)
+    )
     base_adv = 0.0 if not pq_fallback else 0.75
 
     req = {
@@ -123,7 +128,9 @@ def _make_record(
     if stable_key:
         event_id = _sha(f"seed|{stable_key}")
     else:
-        event_id = _sha(f"{kind}|{src}|{tenant_id}|{severity}|{threat_level}|{action_taken}|{ip}|{now.isoformat()}")
+        event_id = _sha(
+            f"{kind}|{src}|{tenant_id}|{severity}|{threat_level}|{action_taken}|{ip}|{now.isoformat()}"
+        )
 
     diff = None
     if threat_level != "none":
@@ -155,6 +162,7 @@ def _make_record(
 # -----------------------------
 # Deterministic seed endpoint
 # -----------------------------
+
 
 @router.post("/seed")
 def dev_seed(
@@ -222,7 +230,11 @@ def dev_seed(
             stable_key=s["stable_key"],
         )
 
-        already = db.query(DecisionRecord.id).filter(DecisionRecord.event_id == event_id).first()
+        already = (
+            db.query(DecisionRecord.id)
+            .filter(DecisionRecord.event_id == event_id)
+            .first()
+        )
         if already:
             existed.append(event_id)
             continue
@@ -232,20 +244,30 @@ def dev_seed(
         created.append(int(rec.id))
 
     db.commit()
-    return {"ok": True, "created": len(created), "created_ids": created, "already_present": len(existed)}
+    return {
+        "ok": True,
+        "created": len(created),
+        "created_ids": created,
+        "already_present": len(existed),
+    }
 
 
 # -----------------------------
 # Existing emit endpoint (kept)
 # -----------------------------
 
+
 @router.post("/emit")
 def dev_emit(
     count: int = Query(10, ge=1, le=500),
-    kind: Literal["auth_attempt", "waf", "edge_gw", "collector", "info"] = "auth_attempt",
+    kind: Literal[
+        "auth_attempt", "waf", "edge_gw", "collector", "info"
+    ] = "auth_attempt",
     severity: Literal["critical", "high", "medium", "low", "info"] = "info",
     threat_level: Literal["critical", "high", "medium", "low", "none"] = "none",
-    action_taken: Literal["blocked", "rate_limited", "quarantined", "log_only"] = "log_only",
+    action_taken: Literal[
+        "blocked", "rate_limited", "quarantined", "log_only"
+    ] = "log_only",
     tenant_id: Optional[str] = None,
     source: Optional[str] = None,
     pq_fallback: bool = False,

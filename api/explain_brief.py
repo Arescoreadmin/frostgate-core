@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+
 def build_explanation_brief(
     event_type: str,
     triggered_rules: List[str],

@@ -7,6 +7,7 @@ from .db import engine
 
 log = logging.getLogger("frostgate.persist")
 
+
 def persist_decision(
     *,
     tenant_id: str,
@@ -56,7 +57,15 @@ def persist_decision(
     try:
         with engine.begin() as c:
             c.execute(sql, payload)
-        log.info("persisted decision event_id=%s in %dms", event_id, int((time.time()-started)*1000))
+        log.info(
+            "persisted decision event_id=%s in %dms",
+            event_id,
+            int((time.time() - started) * 1000),
+        )
     except Exception:
-        log.exception("FAILED to persist decision event_id=%s payload_keys=%s", event_id, list(payload.keys()))
+        log.exception(
+            "FAILED to persist decision event_id=%s payload_keys=%s",
+            event_id,
+            list(payload.keys()),
+        )
         raise

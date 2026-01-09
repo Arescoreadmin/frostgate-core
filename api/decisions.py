@@ -23,6 +23,7 @@ router = APIRouter(prefix="/decisions", tags=["decisions"])
 # Helpers
 # -------------------------
 
+
 def _iso(dt: Any) -> Optional[str]:
     if dt is None:
         return None
@@ -51,6 +52,7 @@ def _loads_json_text(v):
             return None
         try:
             import json
+
             return json.loads(v)
         except Exception:
             return None
@@ -60,6 +62,7 @@ def _loads_json_text(v):
 # -------------------------
 # Response Models
 # -------------------------
+
 
 class DecisionOut(BaseModel):
     id: int
@@ -83,6 +86,7 @@ class DecisionOut(BaseModel):
     response: Optional[Any] = None
     decision_diff: Optional[Any] = None
 
+
 class DecisionsPage(BaseModel):
     items: list[DecisionOut] = Field(default_factory=list)
     limit: int
@@ -94,6 +98,7 @@ class DecisionsPage(BaseModel):
 # Routes
 # -------------------------
 
+
 @router.get(
     "",
     response_model=DecisionsPage,
@@ -103,7 +108,9 @@ def list_decisions(
     db: Session = Depends(get_db),
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0, le=200000),
-    include_raw: bool = Query(False, description="Include request/response JSON blobs (slower)"),
+    include_raw: bool = Query(
+        False, description="Include request/response JSON blobs (slower)"
+    ),
     tenant_id: Optional[str] = Query(None, min_length=1),
     event_type: Optional[str] = Query(None, min_length=1),
     threat_level: Optional[str] = Query(None, min_length=1),
@@ -150,11 +157,15 @@ def list_decisions(
                 event_type=r.event_type,
                 threat_level=r.threat_level,
                 anomaly_score=float(getattr(r, "anomaly_score", 0.0) or 0.0),
-                ai_adversarial_score=float(getattr(r, "ai_adversarial_score", 0.0) or 0.0),
+                ai_adversarial_score=float(
+                    getattr(r, "ai_adversarial_score", 0.0) or 0.0
+                ),
                 pq_fallback=bool(getattr(r, "pq_fallback", False)),
-                rules_triggered=_loads_json_text(getattr(r, "rules_triggered_json", None)),
+                rules_triggered=_loads_json_text(
+                    getattr(r, "rules_triggered_json", None)
+                ),
                 explain_summary=getattr(r, "explain_summary", None),
-            decision_diff=_loads_json_text(getattr(r, "decision_diff_json", None)),
+                decision_diff=_loads_json_text(getattr(r, "decision_diff_json", None)),
                 latency_ms=int(getattr(r, "latency_ms", 0) or 0),
             )
 

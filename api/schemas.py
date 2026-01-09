@@ -11,6 +11,7 @@ class MitigationAction(BaseModel):
     Engine expects MitigationAction(...) as a structured object (keyword args).
     Keep permissive for MVP: action is a string.
     """
+
     model_config = ConfigDict(extra="allow")
 
     action: str
@@ -30,6 +31,7 @@ class TelemetryInput(BaseModel):
       - Doctrine: classification/persona as plain strings
       - extra=allow for forward compatibility during MVP
     """
+
     model_config = ConfigDict(extra="allow")
 
     source: str
@@ -64,9 +66,7 @@ class TelemetryInput(BaseModel):
         # Backfill event_type/src_ip from containers if missing
         if not self.event_type:
             self.event_type = (
-                self.payload.get("event_type")
-                or self.event.get("event_type")
-                or None
+                self.payload.get("event_type") or self.event.get("event_type") or None
             )
         if not self.src_ip:
             self.src_ip = (

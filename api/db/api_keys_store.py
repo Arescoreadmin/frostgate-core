@@ -40,7 +40,9 @@ def insert_api_key(
     if isinstance(scopes, str):
         scopes_csv = scopes.strip()
     else:
-        scopes_csv = ",".join(sorted({s.strip() for s in scopes if s and str(s).strip()}))
+        scopes_csv = ",".join(
+            sorted({s.strip() for s in scopes if s and str(s).strip()})
+        )
 
     sql = text(
         """
@@ -51,15 +53,28 @@ def insert_api_key(
     )
 
     with engine.begin() as conn:
-        row = conn.execute(
-            sql,
-            dict(
-                name=name,
-                prefix=prefix,
-                key_hash=key_hash,
-                scopes_csv=scopes_csv,
-                enabled=enabled,
-            ),
-        ).mappings().first()
+        row = (
+            conn.execute(
+                sql,
+                dict(
+                    name=name,
+                    prefix=prefix,
+                    key_hash=key_hash,
+                    scopes_csv=scopes_csv,
+                    enabled=enabled,
+                ),
+            )
+            .mappings()
+            .first()
+        )
 
-    return dict(row) if row else {"prefix": prefix, "key_hash": key_hash, "scopes_csv": scopes_csv, "enabled": enabled}
+    return (
+        dict(row)
+        if row
+        else {
+            "prefix": prefix,
+            "key_hash": key_hash,
+            "scopes_csv": scopes_csv,
+            "enabled": enabled,
+        }
+    )

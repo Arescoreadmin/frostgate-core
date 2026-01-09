@@ -16,7 +16,11 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import require_scopes, verify_api_key
 from api.db import get_db
 from api.db_models import DecisionRecord
-from api.decision_diff import compute_decision_diff, snapshot_from_current, snapshot_from_record
+from api.decision_diff import (
+    compute_decision_diff,
+    snapshot_from_current,
+    snapshot_from_record,
+)
 from api.ratelimit import rate_limit_guard
 from api.schemas import TelemetryInput
 from api.schemas_doctrine import TieD
@@ -284,7 +288,13 @@ def _threat_from_score(score: int) -> Literal["none", "low", "medium", "high"]:
 
 def evaluate(
     req: TelemetryInput,
-) -> Tuple[Literal["none", "low", "medium", "high"], list[str], list[MitigationAction], float, int]:
+) -> Tuple[
+    Literal["none", "low", "medium", "high"],
+    list[str],
+    list[MitigationAction],
+    float,
+    int,
+]:
     et = _coerce_event_type(req)
     body = _coerce_event_payload(req)
 
@@ -296,7 +306,11 @@ def evaluate(
     anomaly_score = 0.1
 
     # MVP rule: auth brute force => block_ip
-    if et in ("auth", "auth.bruteforce", "auth_attempt") and failed_auths >= 5 and src_ip:
+    if (
+        et in ("auth", "auth.bruteforce", "auth_attempt")
+        and failed_auths >= 5
+        and src_ip
+    ):
         rules_triggered.append("rule:ssh_bruteforce")
         mitigations.append(
             MitigationAction(
@@ -372,7 +386,9 @@ def _apply_doctrine(
     gating_decision: Literal["allow", "require_approval", "reject"] = "allow"
     if persona_v == "guardian" and class_v == "SECRET":
         # require approval if we actually took a disruptive action
-        gating_decision = "require_approval" if any(m.action == "block_ip" for m in out) else "allow"
+        gating_decision = (
+            "require_approval" if any(m.action == "block_ip" for m in out) else "allow"
+        )
 
     tied = TieD(
         roe_applied=roe_applied,
@@ -400,12 +416,16 @@ def _sha256_hex(s: str) -> str:
 
 
 def _compute_chain_hash(prev_hash: Optional[str], payload: dict[str, Any]) -> str:
-    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    blob = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
     return _sha256_hex(f"{prev_hash or ''}:{blob}")
 
 
 def _supports_chain_fields() -> bool:
-    return hasattr(DecisionRecord, "prev_hash") and hasattr(DecisionRecord, "chain_hash")
+    return hasattr(DecisionRecord, "prev_hash") and hasattr(
+        DecisionRecord, "chain_hash"
+    )
 
 
 def _hash_payload(

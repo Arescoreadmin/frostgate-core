@@ -9,7 +9,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from api.config.paths import STATE_DIR  # tests assert this symbol is referenced in this file
+from api.config.paths import (
+    STATE_DIR,
+)  # tests assert this symbol is referenced in this file
 from api.db_models import Base
 
 log = logging.getLogger("frostgate")
@@ -49,7 +51,9 @@ def _resolve_sqlite_path(sqlite_path: Optional[str] = None) -> Path:
     return (Path.cwd() / "state" / "frostgate.db").resolve()
 
 
-def _make_engine(*, sqlite_path: Optional[str] = None, db_url: Optional[str] = None) -> Engine:
+def _make_engine(
+    *, sqlite_path: Optional[str] = None, db_url: Optional[str] = None
+) -> Engine:
     env = _env()
 
     if db_url:
@@ -93,7 +97,9 @@ def reset_engine_cache() -> None:
     _SESSIONMAKER = None
 
 
-def get_engine(*, sqlite_path: Optional[str] = None, db_url: Optional[str] = None) -> Engine:
+def get_engine(
+    *, sqlite_path: Optional[str] = None, db_url: Optional[str] = None
+) -> Engine:
     """
     - If sqlite_path/db_url provided: return a fresh engine (no cache).
     - Else: cached engine.
@@ -118,7 +124,12 @@ def _get_sessionmaker() -> sessionmaker:
     return _SESSIONMAKER
 
 
-def init_db(*, sqlite_path: Optional[str] = None, db_url: Optional[str] = None, engine: Engine | None = None) -> None:
+def init_db(
+    *,
+    sqlite_path: Optional[str] = None,
+    db_url: Optional[str] = None,
+    engine: Engine | None = None,
+) -> None:
     """
     Tests call init_db(sqlite_path=...).
     """

@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional
 
+
 def _as_list(x: Any) -> List[str]:
     if x is None:
         return []
     if isinstance(x, list):
         return [str(i) for i in x]
     return [str(x)]
+
 
 def _maybe_load_json(x: Any) -> Any:
     # DB might store JSON columns as dict/list OR as JSON strings (legacy).
@@ -23,6 +25,7 @@ def _maybe_load_json(x: Any) -> Any:
             return x
     return x
 
+
 def snapshot_from_record(rec: Any) -> Dict[str, Any]:
     # rec: DecisionRecord
     rules = _maybe_load_json(getattr(rec, "rules_triggered_json", None))
@@ -31,7 +34,7 @@ def snapshot_from_record(rec: Any) -> Dict[str, Any]:
     try:
         # response_json may be dict or str; explain might be nested
         if isinstance(resp, dict):
-            score = ((resp.get("explain") or {}).get("score"))
+            score = (resp.get("explain") or {}).get("score")
     except Exception:
         score = None
 
@@ -40,6 +43,7 @@ def snapshot_from_record(rec: Any) -> Dict[str, Any]:
         "rules_triggered": _as_list(rules),
         "score": score,
     }
+
 
 def snapshot_from_current(
     threat_level: Any,
@@ -52,7 +56,10 @@ def snapshot_from_current(
         "score": score,
     }
 
-def compute_decision_diff(prev: Optional[Dict[str, Any]], curr: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+
+def compute_decision_diff(
+    prev: Optional[Dict[str, Any]], curr: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
     """
     Contract:
       - If prev is None/empty => return None
@@ -80,22 +87,26 @@ def compute_decision_diff(prev: Optional[Dict[str, Any]], curr: Dict[str, Any]) 
         delta = None
 
     if (prev_score != curr_score) or (delta not in (0, None)):
-        changes.append({
-            "field": "score",
-            "from": prev_score,
-            "to": curr_score,
-            "delta": delta,
-        })
+        changes.append(
+            {
+                "field": "score",
+                "from": prev_score,
+                "to": curr_score,
+                "delta": delta,
+            }
+        )
 
     # threat level change
     prev_tl = prev.get("threat_level")
     curr_tl = curr.get("threat_level")
     if prev_tl != curr_tl:
-        changes.append({
-            "field": "threat_level",
-            "from": prev_tl,
-            "to": curr_tl,
-        })
+        changes.append(
+            {
+                "field": "threat_level",
+                "from": prev_tl,
+                "to": curr_tl,
+            }
+        )
 
     # rules added/removed
     prev_rules = set(_as_list(prev.get("rules_triggered")))
@@ -104,17 +115,21 @@ def compute_decision_diff(prev: Optional[Dict[str, Any]], curr: Dict[str, Any]) 
     removed = sorted(prev_rules - curr_rules)
 
     if added:
-        changes.append({
-            "field": "rules_triggered",
-            "op": "added",
-            "values": added,
-        })
+        changes.append(
+            {
+                "field": "rules_triggered",
+                "op": "added",
+                "values": added,
+            }
+        )
     if removed:
-        changes.append({
-            "field": "rules_triggered",
-            "op": "removed",
-            "values": removed,
-        })
+        changes.append(
+            {
+                "field": "rules_triggered",
+                "op": "removed",
+                "values": removed,
+            }
+        )
 
     # optional summary (keep it short, not poetic)
     if not changes:

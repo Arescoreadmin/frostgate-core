@@ -41,7 +41,11 @@ class ROEEngine:
         classification = (req.classification or "").strip().upper()
         actions = [m.get("action") for m in req.mitigations if isinstance(m, dict)]
 
-        if persona == "guardian" and classification == "SECRET" and "block_ip" in actions:
+        if (
+            persona == "guardian"
+            and classification == "SECRET"
+            and "block_ip" in actions
+        ):
             return ROEEvaluationResponse(
                 gating_decision="require_approval",
                 reason="Guardian persona requires approval for disruptive actions.",

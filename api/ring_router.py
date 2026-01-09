@@ -27,7 +27,9 @@ class RingPolicy(BaseModel):
     encryption_required: bool = True
     model_isolation: bool = True
     cross_ring_queries_allowed: bool = False
-    audit_level: str = Field(default="basic", pattern="^(basic|detailed|comprehensive)$")
+    audit_level: str = Field(
+        default="basic", pattern="^(basic|detailed|comprehensive)$"
+    )
     model_config = {"protected_namespaces": ()}
     ring: ClassificationRing
     model_isolation: bool = True
@@ -43,10 +45,17 @@ class RingRouteResponse(BaseModel):
     model_path: str
     policy: RingPolicy
 
+
 DEFAULT_POLICIES = {
-    ClassificationRing.UNCLASS: RingPolicy(ring=ClassificationRing.UNCLASS, audit_level="basic"),
-    ClassificationRing.CUI: RingPolicy(ring=ClassificationRing.CUI, audit_level="detailed"),
-    ClassificationRing.SECRET: RingPolicy(ring=ClassificationRing.SECRET, audit_level="comprehensive"),
+    ClassificationRing.UNCLASS: RingPolicy(
+        ring=ClassificationRing.UNCLASS, audit_level="basic"
+    ),
+    ClassificationRing.CUI: RingPolicy(
+        ring=ClassificationRing.CUI, audit_level="detailed"
+    ),
+    ClassificationRing.SECRET: RingPolicy(
+        ring=ClassificationRing.SECRET, audit_level="comprehensive"
+    ),
     ClassificationRing.TOPSECRET: RingPolicy(
         ring=ClassificationRing.TOPSECRET,
         audit_level="comprehensive",
@@ -67,7 +76,9 @@ class RingRouter:
         db_path = f"{self.state_dir}/{classification.value.lower()}/frostgate.db"
         return RingRouteResponse(db_path=db_path, model_path=model_path, policy=policy)
 
-    def enforce_isolation(self, source_ring: ClassificationRing, target_ring: ClassificationRing) -> bool:
+    def enforce_isolation(
+        self, source_ring: ClassificationRing, target_ring: ClassificationRing
+    ) -> bool:
         if source_ring == target_ring:
             return True
         policy = self.ring_policies[source_ring]
@@ -98,7 +109,9 @@ async def route_request(req: RingRouteRequest) -> RingRouteResponse:
 
 
 @router.get("/isolation")
-async def check_isolation(source: ClassificationRing, target: ClassificationRing) -> dict[str, bool]:
+async def check_isolation(
+    source: ClassificationRing, target: ClassificationRing
+) -> dict[str, bool]:
     router_impl = RingRouter()
     return {"allowed": router_impl.enforce_isolation(source, target)}
 

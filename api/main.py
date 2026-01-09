@@ -23,41 +23,54 @@ from api.ui import router as ui_router
 try:
     from api.forensics import forensics_enabled, router as forensics_router
 except Exception:  # pragma: no cover
+
     def forensics_enabled() -> bool:  # type: ignore
         return False
+
     forensics_router = None  # type: ignore
 
 try:
     from api.governance import governance_enabled, router as governance_router
 except Exception:  # pragma: no cover
+
     def governance_enabled() -> bool:  # type: ignore
         return False
+
     governance_router = None  # type: ignore
 
 try:
     # Mission envelope module: accept either exported name, but standardize on mission_envelope_enabled()
     from api.mission_envelope import router as mission_router
+
     try:
         from api.mission_envelope import mission_envelope_enabled  # preferred
     except Exception:  # pragma: no cover
-        from api.mission_envelope import mission_envelopes_enabled as mission_envelope_enabled  # type: ignore
+        from api.mission_envelope import (
+            mission_envelopes_enabled as mission_envelope_enabled,
+        )  # type: ignore
 except Exception:  # pragma: no cover
+
     def mission_envelope_enabled() -> bool:  # type: ignore
         return False
+
     mission_router = None  # type: ignore
 
 try:
     from api.ring_router import ring_router_enabled, router as ring_router
 except Exception:  # pragma: no cover
+
     def ring_router_enabled() -> bool:  # type: ignore
         return False
+
     ring_router = None  # type: ignore
 
 try:
     from api.roe_engine import roe_engine_enabled, router as roe_router
 except Exception:  # pragma: no cover
+
     def roe_engine_enabled() -> bool:  # type: ignore
         return False
+
     roe_router = None  # type: ignore
 
 from api.middleware.auth_gate import AuthGateMiddleware, AuthGateConfig
@@ -243,6 +256,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     # Compatibility shim: older modules importing require_status_auth from api.auth
     try:
         import api.auth as auth_mod  # noqa: E402
+
         if not hasattr(auth_mod, "require_status_auth"):
             setattr(auth_mod, "require_status_auth", require_status_auth)
     except Exception:

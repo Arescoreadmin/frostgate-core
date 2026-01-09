@@ -48,7 +48,14 @@ class TokenUsageStats:
     last_path: Optional[str] = None
     last_tenant_id: Optional[str] = None
 
-    def record(self, *, path: str, status_code: int, latency_ms: float, tenant_id: Optional[str]) -> None:
+    def record(
+        self,
+        *,
+        path: str,
+        status_code: int,
+        latency_ms: float,
+        tenant_id: Optional[str],
+    ) -> None:
         self.calls += 1
         if status_code < 400:
             self.successes += 1
@@ -94,7 +101,12 @@ class TokenUsageTracker:
 
         with self._lock:
             stats = self._stats.setdefault(token_fp, TokenUsageStats())
-            stats.record(path=path, status_code=status_code, latency_ms=latency_ms, tenant_id=tenant_id)
+            stats.record(
+                path=path,
+                status_code=status_code,
+                latency_ms=latency_ms,
+                tenant_id=tenant_id,
+            )
 
         TOKEN_USAGE_REQUESTS.labels(token_fp, path, status_family).inc()
         TOKEN_USAGE_LATENCY_SECONDS.labels(token_fp, path).observe(latency_ms / 1000.0)

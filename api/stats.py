@@ -19,6 +19,7 @@ from api.db_models import DecisionRecord
 # small utilities
 # ----------------------------
 
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -104,6 +105,7 @@ def _event_time(rec: Any) -> Optional[datetime]:
 # extraction: rules + src ip
 # ----------------------------
 
+
 def _extract_rules_from_response_obj(response_obj: Any) -> list[str]:
     if response_obj is None:
         return []
@@ -181,6 +183,7 @@ def _extract_source_ip_from_request_obj(request_obj: Any) -> Optional[str]:
 # ----------------------------
 # summary helpers
 # ----------------------------
+
 
 def _risk_score_from_counts(threat_counts: Dict[str, int]) -> int:
     """
@@ -273,7 +276,9 @@ def _pick_top_event_type(top_events: List["TopItem"]) -> Optional[str]:
     return top_events[0].name or None
 
 
-def _headline(trend: str, risk_24h: int, top_event: Optional[str], top_rule: Optional[str]) -> str:
+def _headline(
+    trend: str, risk_24h: int, top_event: Optional[str], top_rule: Optional[str]
+) -> str:
     """
     One-line demo saver: what a human should feel when they see this.
     """
@@ -281,7 +286,11 @@ def _headline(trend: str, risk_24h: int, top_event: Optional[str], top_rule: Opt
         return "Stable: no detected threats"
 
     if top_event and "bruteforce" in top_event.lower():
-        return "SSH brute force spike detected" if trend == "spike" else "SSH brute force activity detected"
+        return (
+            "SSH brute force spike detected"
+            if trend == "spike"
+            else "SSH brute force activity detected"
+        )
 
     if risk_24h >= 70:
         return f"High risk: investigate {top_event or (top_rule or 'recent activity')}"
@@ -298,6 +307,7 @@ def _headline(trend: str, risk_24h: int, top_event: Optional[str], top_rule: Opt
 # ----------------------------
 # response models
 # ----------------------------
+
 
 class TopItem(BaseModel):
     name: str
@@ -357,6 +367,7 @@ router = APIRouter(
 # Core compute
 # ----------------------------
 
+
 class _Computed:
     def __init__(
         self,
@@ -399,7 +410,9 @@ def _compute_stats(db: Session) -> _Computed:
     try:
         q = db.query(DecisionRecord)
         if hasattr(DecisionRecord, "created_at"):
-            q = q.filter(DecisionRecord.created_at >= (cut_7d - timedelta(days=2)))  # extra buffer
+            q = q.filter(
+                DecisionRecord.created_at >= (cut_7d - timedelta(days=2))
+            )  # extra buffer
         records = q.all()
     except Exception:
         records = []
@@ -432,14 +445,20 @@ def _compute_stats(db: Session) -> _Computed:
             d24h += 1
             total_24h += 1
 
-            tl = str(_get_attr(rec, "threat_level", default="none") or "none").lower().strip()
+            tl = (
+                str(_get_attr(rec, "threat_level", default="none") or "none")
+                .lower()
+                .strip()
+            )
             if tl not in ("none", "low", "medium", "high"):
                 tl = "none"
             threat_counter_24h[tl] += 1
             if tl in ("high", "medium"):
                 high_med_24h += 1
 
-            et = str(_get_attr(rec, "event_type", default="unknown") or "unknown").strip()
+            et = str(
+                _get_attr(rec, "event_type", default="unknown") or "unknown"
+            ).strip()
             event_counter_24h[et or "unknown"] += 1
 
             src = str(_get_attr(rec, "source", default="unknown") or "unknown").strip()
@@ -464,7 +483,11 @@ def _compute_stats(db: Session) -> _Computed:
         if created >= cut_1h:
             d1h += 1
             total_1h += 1
-            tl1 = str(_get_attr(rec, "threat_level", default="none") or "none").lower().strip()
+            tl1 = (
+                str(_get_attr(rec, "threat_level", default="none") or "none")
+                .lower()
+                .strip()
+            )
             if tl1 not in ("none", "low", "medium", "high"):
                 tl1 = "none"
             threat_counter_1h[tl1] += 1
@@ -482,9 +505,15 @@ def _compute_stats(db: Session) -> _Computed:
         high=int(threat_counter_24h.get("high", 0)),
     )
 
-    top_event_types = [TopItem(name=k, count=int(v)) for k, v in event_counter_24h.most_common(10)]
-    top_rules = [TopItem(name=k, count=int(v)) for k, v in rules_counter_24h.most_common(10)]
-    top_sources = [TopItem(name=k, count=int(v)) for k, v in source_counter_24h.most_common(10)]
+    top_event_types = [
+        TopItem(name=k, count=int(v)) for k, v in event_counter_24h.most_common(10)
+    ]
+    top_rules = [
+        TopItem(name=k, count=int(v)) for k, v in rules_counter_24h.most_common(10)
+    ]
+    top_sources = [
+        TopItem(name=k, count=int(v)) for k, v in source_counter_24h.most_common(10)
+    ]
 
     return _Computed(
         now=now,
@@ -506,6 +535,7 @@ def _compute_stats(db: Session) -> _Computed:
 # ----------------------------
 # Routes
 # ----------------------------
+
 
 @router.get("", response_model=StatsResponse)
 def get_stats(db: Session = Depends(get_db)) -> StatsResponse:

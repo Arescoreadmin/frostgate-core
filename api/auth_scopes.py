@@ -14,6 +14,7 @@ from fastapi import Depends, Header, HTTPException, Request
 from api.db import init_db
 
 import logging
+
 log = logging.getLogger("frostgate")
 
 
@@ -52,7 +53,9 @@ def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
         return str(x_api_key).strip()
 
     # Cookie (UI)
-    cookie_name = (os.getenv("FG_UI_COOKIE_NAME") or "fg_api_key").strip() or "fg_api_key"
+    cookie_name = (
+        os.getenv("FG_UI_COOKIE_NAME") or "fg_api_key"
+    ).strip() or "fg_api_key"
     ck = (request.cookies.get(cookie_name) or "").strip()
     if ck:
         return ck
@@ -111,48 +114,64 @@ def mint_key(
         "exp": exp_i,
     }
 
-    token = _b64url(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    token = _b64url(
+        json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    )
     key_hash = hashlib.sha256(secret.encode("utf-8")).hexdigest()
     scopes_csv = ",".join(scopes)
 
     # Persist key into sqlite (schema-aware)
     con = sqlite3.connect(sqlite_path)
     try:
-        cols = con.execute('PRAGMA table_info(api_keys)').fetchall()
+        cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
         # (cid, name, type, notnull, dflt_value, pk)
         names = [r[1] for r in cols]
         notnull = {r[1] for r in cols if int(r[3] or 0) == 1 and r[4] is None}
 
         values = {
-            'prefix': prefix,
-            'key_hash': key_hash,
-            'scopes_csv': scopes_csv,
-            'enabled': 1,
+            "prefix": prefix,
+            "key_hash": key_hash,
+            "scopes_csv": scopes_csv,
+            "enabled": 1,
         }
 
         # Newer schema requires name (NOT NULL)
-        if 'name' in names:
-            values['name'] = 'minted:' + (scopes_csv or 'none')
+        if "name" in names:
+            values["name"] = "minted:" + (scopes_csv or "none")
 
         # Optional schema evolution support
-        if 'tenant_id' in names:
-            values['tenant_id'] = tenant_id
-        if 'created_at' in names and 'created_at' in notnull:
-            values['created_at'] = now_i
+        if "tenant_id" in names:
+            values["tenant_id"] = tenant_id
+        if "created_at" in names and "created_at" in notnull:
+            values["created_at"] = now_i
 
-        ordered = [c for c in ('name','prefix','key_hash','scopes_csv','tenant_id','created_at','enabled') if c in names and c in values]
+        ordered = [
+            c
+            for c in (
+                "name",
+                "prefix",
+                "key_hash",
+                "scopes_csv",
+                "tenant_id",
+                "created_at",
+                "enabled",
+            )
+            if c in names and c in values
+        ]
         if not ordered:
-            raise RuntimeError('api_keys table has no usable columns for insert')
+            raise RuntimeError("api_keys table has no usable columns for insert")
 
-        qcols = ','.join(ordered)
-        qmarks = ','.join(['?'] * len(ordered))
+        qcols = ",".join(ordered)
+        qmarks = ",".join(["?"] * len(ordered))
         params = tuple(values[c] for c in ordered)
-        con.execute(f'INSERT INTO api_keys({qcols}) VALUES({qmarks})', params)
+        con.execute(f"INSERT INTO api_keys({qcols}) VALUES({qmarks})", params)
         con.commit()
     finally:
         con.close()
 
     return f"{prefix}.{token}.{secret}"
+
+
 def verify_api_key_raw(
     raw: Optional[str] = None,
     required_scopes=None,
@@ -214,7 +233,10 @@ def verify_api_key_raw(
         # LEGACY: raw key stored hashed by api.db_models.hash_api_key(raw), prefix=raw[:16]
         prefix = raw[:16]
         try:
-            from api.db_models import hash_api_key as _hash_api_key  # matches tests/_mk_test_key.py
+            from api.db_models import (
+                hash_api_key as _hash_api_key,
+            )  # matches tests/_mk_test_key.py
+
             legacy_hash = _hash_api_key(raw)
         except Exception:
             # fallback to something deterministic; shouldn't be needed if api.db_models exists
@@ -233,7 +255,11 @@ def verify_api_key_raw(
     if required_scopes is None:
         return True
 
-    needed = set(required_scopes) if isinstance(required_scopes, (set, list, tuple)) else {str(required_scopes)}
+    needed = (
+        set(required_scopes)
+        if isinstance(required_scopes, (set, list, tuple))
+        else {str(required_scopes)}
+    )
     needed = {s.strip() for s in needed if str(s).strip()}
     if not needed:
         return True
@@ -279,8 +305,10 @@ def require_scopes(*scopes: str) -> Callable[..., None]:
     needed: Set[str] = {str(s).strip() for s in scopes if str(s).strip()}
 
     if not needed:
+
         def _noop() -> None:
             return None
+
         return _noop
 
     def _scoped_key_dep(

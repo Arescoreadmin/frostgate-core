@@ -7,7 +7,7 @@ from time import perf_counter_ns
 from typing import Optional, Tuple
 
 # production knobs
-MAX_FUTURE_SKEW_SEC = 300          # allow client clock up to 5 minutes ahead
+MAX_FUTURE_SKEW_SEC = 300  # allow client clock up to 5 minutes ahead
 MAX_PAST_AGE_SEC = 30 * 24 * 3600  # accept events up to 30 days old
 
 
@@ -49,7 +49,9 @@ def _parse_iso8601_to_utc(ts_str: str) -> Tuple[Optional[datetime], Optional[str
     return dt.astimezone(timezone.utc), None
 
 
-def compute_event_time(ts_str: Optional[str], *, ingested_at: Optional[datetime] = None) -> EventTimeResult:
+def compute_event_time(
+    ts_str: Optional[str], *, ingested_at: Optional[datetime] = None
+) -> EventTimeResult:
     ing = ingested_at or utcnow()
 
     if not ts_str:
@@ -109,6 +111,7 @@ class RequestTimer:
       ...
       latency_ms = timer.elapsed_ms()
     """
+
     __slots__ = ("_t0",)
 
     def __init__(self) -> None:

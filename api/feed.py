@@ -130,7 +130,9 @@ def _infer_action_taken(decision_diff: Any) -> str:
     return "log_only"
 
 
-def _derive_from_diff(diff: Any) -> tuple[list[str], float | None, list[str], str | None]:
+def _derive_from_diff(
+    diff: Any,
+) -> tuple[list[str], float | None, list[str], str | None]:
     """
     Returns: (rules_triggered, score, changed_fields, action_reason)
     """
@@ -203,7 +205,9 @@ def _backfill_feed_item(i: dict) -> dict:
 
     if i.get("score") is None:
         thr = (i.get("threat_level") or "").lower()
-        i["score"] = 90 if thr in ("critical", "high") else (60 if thr == "medium" else 0)
+        i["score"] = (
+            90 if thr in ("critical", "high") else (60 if thr == "medium" else 0)
+        )
 
     # rules_triggered always list
     if i.get("rules_triggered") is None:
@@ -292,7 +296,9 @@ def feed_live(
     action_taken: str | None = Query(default=None),
     source: str | None = Query(default=None),
     tenant_id: str | None = Query(default=None),
-    q: str | None = Query(default=None, description="search event_type/event_id/source"),
+    q: str | None = Query(
+        default=None, description="search event_type/event_id/source"
+    ),
     # toggles
     only_changed: bool = Query(default=False),
     only_actionable: bool = Query(default=False),
@@ -418,7 +424,9 @@ async def feed_stream(
     action_taken: str | None = Query(default=None),
     source: str | None = Query(default=None),
     tenant_id: str | None = Query(default=None),
-    q: str | None = Query(default=None, description="search event_type/event_id/source"),
+    q: str | None = Query(
+        default=None, description="search event_type/event_id/source"
+    ),
     # toggles
     only_changed: bool = Query(default=False),
     only_actionable: bool = Query(default=False),
@@ -480,11 +488,17 @@ async def feed_stream(
                     last_id = resp.next_since_id
                 elif resp.items:
                     try:
-                        last_id = max(int(it.id) for it in resp.items if it.id is not None)
+                        last_id = max(
+                            int(it.id) for it in resp.items if it.id is not None
+                        )
                     except Exception:
                         pass
 
-                yield "data: " + json.dumps(payload, separators=(",", ":"), ensure_ascii=False) + "\n\n"
+                yield (
+                    "data: "
+                    + json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+                    + "\n\n"
+                )
 
                 now = time.monotonic()
                 if now - last_hb >= heartbeat:

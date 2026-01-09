@@ -16,13 +16,14 @@ created_at = Column(
 )
 
 
-
 class LegacyTelemetryInput(BaseModel):
     """
     Minimal MVP telemetry envelope accepted by /defend.
     """
 
-    source: str = Field(..., description="Telemetry source identifier (e.g., edge gateway id)")
+    source: str = Field(
+        ..., description="Telemetry source identifier (e.g., edge gateway id)"
+    )
     tenant_id: str = Field(..., description="Tenant identifier")
     timestamp: datetime = Field(..., description="Event timestamp (UTC)")
     payload: dict[str, Any] = Field(
@@ -36,6 +37,7 @@ class DefendRequest(TelemetryInput):
     Backwards-compat for older code that expected DefendRequest as the input type.
     For now it's identical to TelemetryInput.
     """
+
     pass
 
 

@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import json
-from api.decision_diff import compute_decision_diff, snapshot_from_current, snapshot_from_record
+from api.decision_diff import (
+    compute_decision_diff,
+    snapshot_from_current,
+    snapshot_from_record,
+)
 import logging
 import time
 import uuid
@@ -27,10 +31,13 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 # ---- rate limit guard: keep stable, do not invent new paths mid-MVP ----
 try:
     from api.ratelimit import rate_limit_guard  # your known path earlier
+
     _RATE_LIMIT_DEP = Depends(rate_limit_guard)
 except Exception:  # pragma: no cover
+
     async def _noop():
         return None
+
     _RATE_LIMIT_DEP = Depends(_noop)
 
 
@@ -51,7 +58,9 @@ def _safe_json(obj: Any) -> str:
         return json.dumps({"_unserializable": str(obj)}, separators=(",", ":"))
 
 
-def _resolve_tenant_id(req: TelemetryInput, x_tenant_id: Optional[str], request: Request) -> str:
+def _resolve_tenant_id(
+    req: TelemetryInput, x_tenant_id: Optional[str], request: Request
+) -> str:
     tid = (x_tenant_id or req.tenant_id or "").strip()
     if not tid:
         tid = getattr(request.state, "tenant_id", "") or "unknown"
@@ -74,10 +83,25 @@ def _extract_event_type(req: TelemetryInput) -> str:
     return et or "unknown"
 
 
-def _extract_actor_target(payload: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
-    actor = payload.get("actor") or payload.get("username") or payload.get("user") or payload.get("principal")
-    target = payload.get("target") or payload.get("resource") or payload.get("dst") or payload.get("dst_ip")
-    return (str(actor) if actor is not None else None, str(target) if target is not None else None)
+def _extract_actor_target(
+    payload: dict[str, Any],
+) -> tuple[Optional[str], Optional[str]]:
+    actor = (
+        payload.get("actor")
+        or payload.get("username")
+        or payload.get("user")
+        or payload.get("principal")
+    )
+    target = (
+        payload.get("target")
+        or payload.get("resource")
+        or payload.get("dst")
+        or payload.get("dst_ip")
+    )
+    return (
+        str(actor) if actor is not None else None,
+        str(target) if target is not None else None,
+    )
 
 
 def _extract_src_ip(payload: dict[str, Any]) -> Optional[str]:
@@ -133,14 +157,17 @@ async def ingest(
 
     # ---- evaluate (never crash ingest) ----
     try:
-        decision = evaluate(
-            {
-                "tenant_id": tenant_id,
-                "source": source,
-                "event_type": event_type,
-                "payload": payload,
-            }
-        ) or {}
+        decision = (
+            evaluate(
+                {
+                    "tenant_id": tenant_id,
+                    "source": source,
+                    "event_type": event_type,
+                    "payload": payload,
+                }
+            )
+            or {}
+        )
     except Exception:
         log.exception("evaluation failed")
         decision = {

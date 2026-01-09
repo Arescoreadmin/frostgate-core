@@ -99,6 +99,7 @@ def _require_ui_key(req: Request) -> None:
 # === FG:UI_FEED:BEGIN ===
 # =============================================================================
 
+
 @router.get(
     "/feed",
     response_class=HTMLResponse,
@@ -108,7 +109,7 @@ def _require_ui_key(req: Request) -> None:
 def ui_feed(request: Request) -> HTMLResponse:
     _require_ui_key(request)
     # Canonical UI feed: SSE + polling fallback + watchdog. Single source of truth.
-    return HTMLResponse(r'''\
+    return HTMLResponse(r"""\
 <!doctype html>
 <html>
 <head>
@@ -452,7 +453,9 @@ def ui_feed(request: Request) -> HTMLResponse:
 </body>
 </html>
 
-''' )
+""")
+
+
 def ui_token_get(
     request: Request,
     api_key: str | None = Query(default=None, alias="api_key"),
@@ -500,8 +503,6 @@ def ui_token_get(
         max_age=60 * 60 * 8,
     )
     return resp
-
-
 
 
 @router.get("/token")

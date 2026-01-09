@@ -19,6 +19,7 @@ except Exception:  # pragma: no cover
 # Config
 # -----------------------------
 
+
 def _env_bool(name: str, default: bool) -> bool:
     v = os.getenv(name)
     if v is None:
@@ -50,21 +51,21 @@ def _env_csv(name: str, default: str = "") -> set[str]:
 @dataclass(frozen=True)
 class RLConfig:
     enabled: bool
-    backend: str             # "redis" (recommended) | "memory" (not provided here)
-    scope: str               # "tenant" | "source" | "ip"
+    backend: str  # "redis" (recommended) | "memory" (not provided here)
+    scope: str  # "tenant" | "source" | "ip"
     paths: set[str]
     bypass_keys: set[str]
 
     # Token bucket
-    rate_per_sec: float      # refill rate (tokens/sec)
-    burst: int               # extra burst capacity
+    rate_per_sec: float  # refill rate (tokens/sec)
+    burst: int  # extra burst capacity
 
     # Redis
     redis_url: str
-    prefix: str              # key namespace
+    prefix: str  # key namespace
 
     # Failure behavior
-    fail_open: bool          # if redis fails, allow requests
+    fail_open: bool  # if redis fails, allow requests
 
 
 def load_config() -> RLConfig:
@@ -109,6 +110,7 @@ def load_config() -> RLConfig:
 # -----------------------------
 # Keying
 # -----------------------------
+
 
 def _api_key_from_request(request: Request) -> str:
     return (request.headers.get("x-api-key") or "").strip()
@@ -262,6 +264,7 @@ def _allow_redis(key: str, cfg: RLConfig) -> Tuple[bool, int, int, int]:
 # FastAPI dependency
 # -----------------------------
 
+
 async def rate_limit_guard(
     request: Request,
     _: Any = Depends(verify_api_key),
@@ -296,4 +299,6 @@ async def rate_limit_guard(
     }
 
     if not ok:
-        raise HTTPException(status_code=429, detail="Rate limit exceeded", headers=headers)
+        raise HTTPException(
+            status_code=429, detail="Rate limit exceeded", headers=headers
+        )
