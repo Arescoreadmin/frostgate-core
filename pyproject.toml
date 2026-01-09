@@ -8,6 +8,9 @@ version = "0.1.0"
 description = "FrostGate Core"
 requires-python = ">=3.12"
 
+[project.scripts]
+fg-mint-key = "scripts.mint_api_key:main"
+
 [tool.setuptools]
 include-package-data = true
 
@@ -15,13 +18,10 @@ include-package-data = true
 where = ["."]
 include = ["api*", "engine*", "agent*", "scripts*"]
 
-[project.scripts]
-fg-mint-key = "scripts.mint_api_key:main"
-
 [tool.pytest.ini_options]
 testpaths = ["tests", "backend/tests"]
 norecursedirs = [".venv", "artifacts", "state"]
 markers = [
   "e2e_http: HTTP e2e tests against a running server",
 ]
-
+asyncio_default_fixture_loop_scope = "function"
