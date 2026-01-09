@@ -1,6 +1,7 @@
 import pytest
 from starlette.testclient import TestClient
 
+
 @pytest.mark.contract
 def test_ui_token_is_public_and_sets_cookie(build_app):
     app = build_app(auth_enabled=True)
@@ -9,6 +10,7 @@ def test_ui_token_is_public_and_sets_cookie(build_app):
     assert r.status_code == 200
     assert "set-cookie" in {k.lower(): v for k, v in r.headers.items()}
 
+
 @pytest.mark.contract
 def test_ui_feed_without_cookie_is_401_not_500(build_app):
     app = build_app(auth_enabled=True)
@@ -16,6 +18,7 @@ def test_ui_feed_without_cookie_is_401_not_500(build_app):
     r = c.get("/ui/feed")
     assert r.status_code == 401
     assert r.headers.get("x-fg-authgate")
+
 
 @pytest.mark.contract
 def test_ui_feed_with_cookie_is_200_html(build_app):

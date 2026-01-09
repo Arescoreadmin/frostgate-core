@@ -35,6 +35,7 @@ def build_app(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch)
     """
     Factory fixture so tests can build an app with controlled env.
     """
+
     def _factory(
         auth_enabled: bool = True,
         sqlite_path: str | None = None,
@@ -49,7 +50,9 @@ def build_app(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch)
         monkeypatch.setenv("FG_AUTH_ENABLED", "1" if auth_enabled else "0")
         monkeypatch.setenv("FG_API_KEY", api_key)
         monkeypatch.setenv("FG_DEV_EVENTS_ENABLED", "1" if dev_events_enabled else "0")
-        monkeypatch.setenv("FG_UI_TOKEN_GET_ENABLED", "1" if ui_token_get_enabled else "0")
+        monkeypatch.setenv(
+            "FG_UI_TOKEN_GET_ENABLED", "1" if ui_token_get_enabled else "0"
+        )
 
         reset_engine_cache()
         init_db(sqlite_path=db_path)

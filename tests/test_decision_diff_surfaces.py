@@ -7,6 +7,7 @@ from api.auth_scopes import mint_key
 
 client = TestClient(app)
 
+
 @pytest.mark.smoke
 def test_decision_diff_exposed_in_decisions_and_feed():
     # generate two decisions with same (tenant/source/event_type) to create a diff

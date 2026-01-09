@@ -39,6 +39,7 @@ def build_app(auth_enabled: bool):
 
     # Re-import main so it pulls fresh `settings`
     import api.main as main
+
     importlib.reload(main)
 
     return main.app

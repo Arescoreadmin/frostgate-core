@@ -119,7 +119,9 @@ help:
 	  "  make no-drift            guards + itest-local + pytest + git clean check" \
 	  "" \
 	  "CI:" \
-	  "  make ci                  opinionated CI lane" \
+	  "  make ci                  unit lane (fg-fast)" \
+	  "  make ci-integration      integration lane (itest-local)" \
+	  "  make ci-evidence         evidence lane (itest-up + smoke + evidence)" \
 	  ""
 
 # =============================================================================
@@ -150,6 +152,15 @@ fg-compile: guard-scripts
 	@$(PY) -m py_compile api/main.py api/feed.py api/ui.py api/dev_events.py api/auth_scopes.py
 
 # =============================================================================
+# Lint
+# =============================================================================
+.PHONY: fg-lint
+fg-lint:
+	@$(PY) -m py_compile api/middleware/auth_gate.py
+	@$(PY) -m ruff check api tests
+	@$(PY) -m ruff format --check api tests
+
+# =============================================================================
 # Fast lane (no server)
 # =============================================================================
 .PHONY: fg-fast
@@ -158,26 +169,17 @@ fg-fast: fg-audit-make fg-contract fg-compile
 	@$(MAKE) -s fg-lint
 
 # =============================================================================
-# Live port guard (prevents zombie confusion)
+# Live port guard (no heredoc; paste-safe)
 # =============================================================================
 .PHONY: fg-live-port-check
 fg-live-port-check:
 	@set -euo pipefail; \
-	host="$(HOST)"; port="$(PORT)"; \
-	python - <<'PY' "$$host" "$$port"
-import socket, sys
-host = sys.argv[1]
-port = int(sys.argv[2])
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.settimeout(0.25)
-try:
-    rc = s.connect_ex((host, port))
-finally:
-    s.close()
-if rc == 0:
-    raise SystemExit(f"❌ Refusing to start: {host}:{port} already has a listener (zombie server?)")
-print(f"✅ Port free: {host}:{port}")
-PY
+	h="$(HOST)"; p="$(PORT)"; \
+	python -c 'import socket,sys,subprocess,shutil; h=sys.argv[1]; p=int(sys.argv[2]); s=socket.socket(socket.AF_INET,socket.SOCK_STREAM); s.settimeout(0.25); rc=s.connect_ex((h,p)); s.close(); \
+	( print(f"✅ Port free: {h}:{p}") or sys.exit(0) ) if rc!=0 else None; \
+	print(f"❌ Refusing to start: {h}:{p} already has a listener"); \
+	( print(subprocess.check_output(["lsof","-nP",f"-iTCP:{p}","-sTCP:LISTEN"],stderr=subprocess.DEVNULL,text=True).strip() or "") ) if shutil.which("lsof") else print("(lsof not available; cannot identify owning process)"); \
+	sys.exit(1)' "$$h" "$$p"
 
 # =============================================================================
 # Local server (canonical)
@@ -320,11 +322,70 @@ no-drift-check-clean:
 	fi
 
 # =============================================================================
-# CI lane (keep it tight)
+# CI lanes (single source of truth)
 # =============================================================================
-.PHONY: ci-integration
+.PHONY: ci ci-integration
+ci: fg-fast
+	@echo "✅ CI unit lane OK"
+
 ci-integration: itest-local
 	@echo "✅ CI integration lane OK"
+
+# =============================================================================
+# Evidence bundle (signed)
+# =============================================================================
+EVIDENCE_SCENARIO ?= $(or $(SCENARIO),spike)
+
+.PHONY: evidence
+evidence:
+	@set -euo pipefail; \
+	test -n "$${BASE_URL:-}" || (echo "❌ BASE_URL is required" && exit 1); \
+	test -n "$${FG_API_KEY:-}" || (echo "❌ FG_API_KEY is required" && exit 1); \
+	test -n "$${FG_SQLITE_PATH:-}" || (echo "❌ FG_SQLITE_PATH is required" && exit 1); \
+	mkdir -p "$(ARTIFACTS_DIR)" "$(STATE_DIR)" keys; \
+	ts="$$(date -u +%Y%m%dT%H%M%SZ)"; \
+	out="$(ARTIFACTS_DIR)/evidence_$${ts}_$${EVIDENCE_SCENARIO}"; \
+	mkdir -p "$$out"; \
+	echo "$$out" > "$(ARTIFACTS_DIR)/latest_evidence_dir.txt"; \
+	echo "$${EVIDENCE_SCENARIO}" > "$$out/scenario.txt"; \
+	git rev-parse HEAD > "$$out/git_head.txt"; \
+	git status --porcelain=v1 > "$$out/git_status.txt" || true; \
+	curl -fsS "$${BASE_URL}/health" > "$$out/health.json"; \
+	curl -fsS "$${BASE_URL}/health/ready" > "$$out/health_ready.json" || true; \
+	curl -fsS "$${BASE_URL}/openapi.json" > "$$out/openapi.json" || true; \
+	cp -f CONTRACT.md "$$out/CONTRACT.md" 2>/dev/null || true; \
+	cp -f README.md "$$out/README.md" 2>/dev/null || true; \
+	( command -v sha256sum >/dev/null 2>&1 ) || (echo "❌ sha256sum missing" && exit 1); \
+	( cd "$$out" && find . -type f -maxdepth 2 -print0 | sort -z | xargs -0 sha256sum > manifest.sha256 ); \
+	( command -v minisign >/dev/null 2>&1 ) || (echo "❌ minisign missing (install it)" && exit 1); \
+	if [ -n "$${MINISIGN_SECRET_KEY:-}" ]; then \
+		printf "%s\n" "$${MINISIGN_SECRET_KEY}" > keys/minisign.key; \
+		chmod 600 keys/minisign.key; \
+		sec="keys/minisign.key"; \
+	elif [ -f minisign.key ]; then \
+		sec="minisign.key"; \
+	else \
+		echo "❌ No signing key. Provide MINISIGN_SECRET_KEY or minisign.key"; \
+		exit 1; \
+	fi; \
+	minisign -Sm "$$out/manifest.sha256" -s "$$sec"; \
+	zipname="$(ARTIFACTS_DIR)/frostgate_evidence_$${ts}_$${EVIDENCE_SCENARIO}.zip"; \
+	( cd "$(ARTIFACTS_DIR)" && zip -qr "$$(basename "$$zipname")" "$$(basename "$$out")" ); \
+	echo "$$zipname" > "$(ARTIFACTS_DIR)/latest_zip.txt"; \
+	echo "✅ evidence zip: $$zipname"
+
+# =============================================================================
+# CI Evidence lane (start itest server, smoke, evidence, stop)
+# =============================================================================
+.PHONY: ci-evidence
+ci-evidence:
+	@set -euo pipefail; \
+	$(MAKE) -s itest-down >/dev/null 2>&1 || true; \
+	$(MAKE) -s itest-up; \
+	trap '$(MAKE) -s itest-down >/dev/null 2>&1 || true' EXIT; \
+	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" ./scripts/smoke_auth.sh; \
+	SCENARIO="$${SCENARIO:-spike}" BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s evidence; \
+	echo "✅ CI evidence lane OK"
 
 # =============================================================================
 # Doctor
@@ -338,15 +399,6 @@ doctor: guard-scripts
 	@echo "✅ doctor OK"
 
 # =============================================================================
-# Lint
-# =============================================================================
-.PHONY: fg-lint
-fg-lint:
-	@$(PY) -m py_compile api/middleware/auth_gate.py
-	@$(PY) -m ruff check api tests
-	@$(PY) -m ruff format --check api tests
-
-# =============================================================================
 # Convenience: run integration marker against a running itest-up server
 # =============================================================================
 .PHONY: itest-integration
@@ -356,48 +408,3 @@ itest-integration: itest-up
 	BASE_URL="$(BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(FG_SQLITE_PATH)" \
 	$(PYTEST_ENV) $(PY) -m pytest -q -m integration; \
 	echo "✅ itest-integration OK"
-
-# =============================================================================
-# Live Port Check Convenience
-# =============================================================================
-.PHONY: fg-live-port-check
-fg-live-port-check:
-	@set -euo pipefail; \
-	host="$(HOST)"; port="$(PORT)"; \
-	python - <<'PY' "$$host" "$$port"
-import socket, sys, subprocess, shutil
-
-host = sys.argv[1]
-port = int(sys.argv[2])
-
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.settimeout(0.25)
-try:
-    rc = s.connect_ex((host, port))
-finally:
-    s.close()
-
-if rc != 0:
-    print(f"✅ Port free: {host}:{port}")
-    raise SystemExit(0)
-
-print(f"❌ Refusing to start: {host}:{port} already has a listener")
-
-# Optional: try to identify owning process via lsof (best-effort)
-if shutil.which("lsof"):
-    try:
-        out = subprocess.check_output(
-            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"],
-            stderr=subprocess.DEVNULL,
-            text=True,
-        ).strip()
-        if out:
-            print("\n--- lsof output ---")
-            print(out)
-    except Exception:
-        pass
-else:
-    print("(lsof not available; cannot identify owning process)")
-
-raise SystemExit(1)
-PY

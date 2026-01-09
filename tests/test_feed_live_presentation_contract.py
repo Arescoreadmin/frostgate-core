@@ -1,9 +1,9 @@
 import os
 import importlib
-import pytest
 from fastapi.testclient import TestClient
 
 API_KEY = "supersecret"
+
 
 def build_app(auth_enabled: bool):
     # Always set auth env before importing main (since main/build_app may read env)
@@ -11,8 +11,10 @@ def build_app(auth_enabled: bool):
     os.environ["FG_API_KEY"] = API_KEY
 
     import api.main as main
+
     importlib.reload(main)
     return main.build_app(auth_enabled)
+
 
 def test_feed_live_items_have_presentation_fields(tmp_path):
     # Set DB path BEFORE anything imports/initializes DB
@@ -21,6 +23,7 @@ def test_feed_live_items_have_presentation_fields(tmp_path):
 
     # Ensure schema exists in the sqlite file we just pointed at
     import api.db as db
+
     importlib.reload(db)  # make sure it picks up env-driven path
     db.init_db()
 
@@ -42,6 +45,14 @@ def test_feed_live_items_have_presentation_fields(tmp_path):
 
     i = data["items"][0]
     # hard contract
-    for k in ["timestamp", "severity", "title", "summary", "action_taken", "confidence", "score"]:
+    for k in [
+        "timestamp",
+        "severity",
+        "title",
+        "summary",
+        "action_taken",
+        "confidence",
+        "score",
+    ]:
         assert k in i, f"missing {k}"
         assert i[k] is not None, f"{k} is None"

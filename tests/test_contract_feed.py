@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict
+from typing import Dict
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +16,7 @@ REQUIRED_PRESENTATION_FIELDS = (
     "confidence",
     "score",
 )
+
 
 def _auth_headers() -> Dict[str, str]:
     return {"X-API-Key": os.getenv("FG_API_KEY", "supersecret")}
@@ -70,7 +71,10 @@ def test_only_actionable_filters_dev_seed_noise(build_app):
     # Contract: MUST NOT return dev_seed items that are low/info + log_only
     for it in items:
         if it.get("source") == "dev_seed":
-            if it.get("action_taken") == "log_only" and it.get("severity") in ("low", "info"):
+            if it.get("action_taken") == "log_only" and it.get("severity") in (
+                "low",
+                "info",
+            ):
                 pytest.fail("only_actionable filter leaked dev_seed noise item")
 
 

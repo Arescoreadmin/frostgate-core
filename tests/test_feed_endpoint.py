@@ -1,5 +1,4 @@
 from api.auth_scopes import mint_key
-import os
 import pytest
 from fastapi.testclient import TestClient
 
@@ -7,10 +6,12 @@ from api.main import app
 
 client = TestClient(app)
 
+
 @pytest.mark.smoke
 def test_feed_live_requires_auth():
     r = client.get("/feed/live?limit=5")
     assert r.status_code in (401, 403)
+
 
 @pytest.mark.smoke
 def test_feed_live_returns_items_with_auth():
@@ -25,5 +26,13 @@ def test_feed_live_returns_items_with_auth():
     assert isinstance(body["items"], list)
     if body["items"]:
         item = body["items"][0]
-        for k in ("decision_id", "timestamp", "severity", "title", "summary", "action_taken", "confidence"):
+        for k in (
+            "decision_id",
+            "timestamp",
+            "severity",
+            "title",
+            "summary",
+            "action_taken",
+            "confidence",
+        ):
             assert k in item

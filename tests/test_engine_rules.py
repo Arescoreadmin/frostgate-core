@@ -21,7 +21,9 @@ def _telemetry_auth(failed_auths: int) -> TelemetryInput:
 def test_bruteforce_rule_triggers_high_threat():
     telemetry = _telemetry_auth(failed_auths=12)
 
-    threat_level, mitigations, rules, anomaly_score, ai_adv_score = evaluate_rules(telemetry)
+    threat_level, mitigations, rules, anomaly_score, ai_adv_score = evaluate_rules(
+        telemetry
+    )
 
     assert threat_level == "high"
     assert "rule:ssh_bruteforce" in rules
@@ -33,7 +35,9 @@ def test_bruteforce_rule_triggers_high_threat():
 def test_low_auth_noise_is_not_high():
     telemetry = _telemetry_auth(failed_auths=1)
 
-    threat_level, mitigations, rules, anomaly_score, ai_adv_score = evaluate_rules(telemetry)
+    threat_level, mitigations, rules, anomaly_score, ai_adv_score = evaluate_rules(
+        telemetry
+    )
 
     assert threat_level in {"low", "medium"}
     assert "rule:ssh_bruteforce" not in rules

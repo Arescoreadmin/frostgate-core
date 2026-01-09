@@ -1,5 +1,4 @@
 # tests/test_auth_tenants.py
-import types
 
 import pytest
 from httpx import AsyncClient, ASGITransport
@@ -23,7 +22,9 @@ async def test_tenant_key_allows_when_active(monkeypatch):
 
     def fake_get_tenant(tenant_id: str):
         if tenant_id == "acme-prod":
-            return DummyTenant(tenant_id="acme-prod", api_key="tenant-secret", status="active")
+            return DummyTenant(
+                tenant_id="acme-prod", api_key="tenant-secret", status="active"
+            )
         return None
 
     monkeypatch.setattr(auth, "get_tenant", fake_get_tenant, raising=False)
@@ -49,7 +50,9 @@ async def test_tenant_revoked_is_rejected(monkeypatch):
     import api.auth as auth
 
     def fake_get_tenant(tenant_id: str):
-        return DummyTenant(tenant_id=tenant_id, api_key="tenant-secret", status="revoked")
+        return DummyTenant(
+            tenant_id=tenant_id, api_key="tenant-secret", status="revoked"
+        )
 
     monkeypatch.setattr(auth, "get_tenant", fake_get_tenant, raising=False)
 
@@ -75,7 +78,9 @@ async def test_global_key_still_works_with_registry(monkeypatch):
     import api.auth as auth
 
     def fake_get_tenant(tenant_id: str):
-        return DummyTenant(tenant_id=tenant_id, api_key="tenant-secret", status="active")
+        return DummyTenant(
+            tenant_id=tenant_id, api_key="tenant-secret", status="active"
+        )
 
     monkeypatch.setattr(auth, "get_tenant", fake_get_tenant, raising=False)
 

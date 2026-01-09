@@ -5,8 +5,10 @@ from fastapi.testclient import TestClient
 
 client = TestClient(app)
 
+
 def _latest_decision(db):
     return db.query(DecisionRecord).order_by(DecisionRecord.id.desc()).first()
+
 
 def test_decision_diff_is_persisted_in_db_after_second_event():
     payload = {
@@ -29,6 +31,8 @@ def test_decision_diff_is_persisted_in_db_after_second_event():
         # Column exists and should be null-or-dict depending on whether prior exists in query scope
         # Second decision should compute a diff (prev exists)
         assert hasattr(rec, "decision_diff_json")
-        assert rec.decision_diff_json is None or isinstance(rec.decision_diff_json, (dict, list))
+        assert rec.decision_diff_json is None or isinstance(
+            rec.decision_diff_json, (dict, list)
+        )
     finally:
         db.close()

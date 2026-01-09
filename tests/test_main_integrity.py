@@ -1,5 +1,6 @@
 from pathlib import Path
 
+
 def test_main_py_not_truncated():
     txt = Path("api/main.py").read_text(encoding="utf-8")
     assert "def build_app" in txt

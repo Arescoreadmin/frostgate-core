@@ -25,7 +25,13 @@ import requests
 BASE_URL = os.getenv("FG_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 API_KEY = os.getenv("FG_API_KEY", "supersecret")
 
-E2E_ENABLED = os.getenv("FG_E2E_HTTP", "").strip().lower() in ("1", "true", "yes", "y", "on")
+E2E_ENABLED = os.getenv("FG_E2E_HTTP", "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "y",
+    "on",
+)
 
 pytestmark = pytest.mark.e2e_http
 
@@ -45,7 +51,9 @@ def _req(
     json: Optional[Dict[str, Any]] = None,
 ) -> requests.Response:
     url = f"{BASE_URL}{path}"
-    return requests.request(method, url, headers=_headers(with_key=with_key), json=json, timeout=timeout)
+    return requests.request(
+        method, url, headers=_headers(with_key=with_key), json=json, timeout=timeout
+    )
 
 
 def _wait_for_health(timeout_s: float = 20.0) -> None:
@@ -90,10 +98,15 @@ def _json_or_fail(r: requests.Response) -> Any:
     try:
         return r.json()
     except Exception as e:  # noqa: BLE001
-        raise AssertionError(f"Expected JSON, got status={r.status_code}, body={r.text[:400]} err={e!r}")
+        raise AssertionError(
+            f"Expected JSON, got status={r.status_code}, body={r.text[:400]} err={e!r}"
+        )
 
 
-@pytest.mark.skipif(not E2E_ENABLED, reason="FG_E2E_HTTP not enabled (set FG_E2E_HTTP=1 to run HTTP e2e tests)")
+@pytest.mark.skipif(
+    not E2E_ENABLED,
+    reason="FG_E2E_HTTP not enabled (set FG_E2E_HTTP=1 to run HTTP e2e tests)",
+)
 def test_http_health_ready() -> None:
     _wait_for_health()
 
@@ -105,7 +118,10 @@ def test_http_health_ready() -> None:
         assert r2.status_code == 200
 
 
-@pytest.mark.skipif(not E2E_ENABLED, reason="FG_E2E_HTTP not enabled (set FG_E2E_HTTP=1 to run HTTP e2e tests)")
+@pytest.mark.skipif(
+    not E2E_ENABLED,
+    reason="FG_E2E_HTTP not enabled (set FG_E2E_HTTP=1 to run HTTP e2e tests)",
+)
 def test_http_openapi_exists_and_has_core_paths() -> None:
     _wait_for_health()
 
@@ -117,7 +133,7 @@ def test_http_openapi_exists_and_has_core_paths() -> None:
     assert "paths" in spec and isinstance(spec["paths"], dict)
 
     paths = spec["paths"]
-     # Always-present core paths
+    # Always-present core paths
     assert "/health" in paths
     assert "/health/ready" in paths
     assert "/feed/live" in paths
@@ -128,7 +144,10 @@ def test_http_openapi_exists_and_has_core_paths() -> None:
     assert "/stats" in paths
 
 
-@pytest.mark.skipif(not E2E_ENABLED, reason="FG_E2E_HTTP not enabled (set FG_E2E_HTTP=1 to run HTTP e2e tests)")
+@pytest.mark.skipif(
+    not E2E_ENABLED,
+    reason="FG_E2E_HTTP not enabled (set FG_E2E_HTTP=1 to run HTTP e2e tests)",
+)
 def test_http_feed_live_shape_and_auth() -> None:
     _wait_for_health()
 
@@ -142,7 +161,9 @@ def test_http_feed_live_shape_and_auth() -> None:
         assert r_no.status_code in (200, 204)
 
     r = _req("GET", feed_path, with_key=True)
-    assert r.status_code in (200, 204), f"{feed_path} unexpected: {r.status_code} {r.text[:200]}"
+    assert r.status_code in (200, 204), (
+        f"{feed_path} unexpected: {r.status_code} {r.text[:200]}"
+    )
 
     if r.status_code == 204:
         return
@@ -162,11 +183,26 @@ def test_http_feed_live_shape_and_auth() -> None:
         item = data[0]
         assert isinstance(item, dict)
         # minimal “this is an event-ish thing” sanity keys
-        key_candidates = ("id", "event_id", "ts", "timestamp", "type", "severity", "risk", "score", "hash")
-        assert any(k in item for k in key_candidates), f"Feed item missing expected keys: {item.keys()}"
+        key_candidates = (
+            "id",
+            "event_id",
+            "ts",
+            "timestamp",
+            "type",
+            "severity",
+            "risk",
+            "score",
+            "hash",
+        )
+        assert any(k in item for k in key_candidates), (
+            f"Feed item missing expected keys: {item.keys()}"
+        )
 
 
-@pytest.mark.skipif(not E2E_ENABLED, reason="FG_E2E_HTTP not enabled (set FG_E2E_HTTP=1 to run HTTP e2e tests)")
+@pytest.mark.skipif(
+    not E2E_ENABLED,
+    reason="FG_E2E_HTTP not enabled (set FG_E2E_HTTP=1 to run HTTP e2e tests)",
+)
 def test_http_dev_seed_and_emit_optional() -> None:
     """
     /dev/seed and /dev/emit exist in your repo. They should work with API key.
@@ -176,14 +212,21 @@ def test_http_dev_seed_and_emit_optional() -> None:
 
     # seed
     r_seed = _req("POST", "/dev/seed", with_key=True, json={})
-    assert r_seed.status_code in (200, 204), f"/dev/seed unexpected: {r_seed.status_code} {r_seed.text[:200]}"
+    assert r_seed.status_code in (200, 204), (
+        f"/dev/seed unexpected: {r_seed.status_code} {r_seed.text[:200]}"
+    )
 
     # emit (lightweight, doesn't assume schema beyond being accepted)
     r_emit = _req("POST", "/dev/emit", with_key=True, json={"count": 1})
-    assert r_emit.status_code in (200, 204), f"/dev/emit unexpected: {r_emit.status_code} {r_emit.text[:200]}"
+    assert r_emit.status_code in (200, 204), (
+        f"/dev/emit unexpected: {r_emit.status_code} {r_emit.text[:200]}"
+    )
 
 
-@pytest.mark.skipif(not E2E_ENABLED, reason="FG_E2E_HTTP not enabled (set FG_E2E_HTTP=1 to run HTTP e2e tests)")
+@pytest.mark.skipif(
+    not E2E_ENABLED,
+    reason="FG_E2E_HTTP not enabled (set FG_E2E_HTTP=1 to run HTTP e2e tests)",
+)
 def test_http_stats_debug_optional() -> None:
     """
     main.py exposes /stats/debug. Validate it's reachable (best-effort).
@@ -194,6 +237,8 @@ def test_http_stats_debug_optional() -> None:
     if r.status_code == 404:
         pytest.skip("/stats/debug not exposed in this build")
 
-    assert r.status_code == 200, f"/stats/debug unexpected: {r.status_code} {r.text[:200]}"
+    assert r.status_code == 200, (
+        f"/stats/debug unexpected: {r.status_code} {r.text[:200]}"
+    )
     data = _json_or_fail(r)
     assert isinstance(data, dict)

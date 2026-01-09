@@ -14,7 +14,9 @@ def _b(v: bool) -> str:
     return "1" if bool(v) else "0"
 
 
-def _set_env(tmp_path: Path, *, api_key: str, auth_enabled: bool, dev_events_enabled: bool) -> None:
+def _set_env(
+    tmp_path: Path, *, api_key: str, auth_enabled: bool, dev_events_enabled: bool
+) -> None:
     """
     Centralized, deterministic test env.
     Tests MUST NOT rely on user's shell env.
@@ -25,7 +27,9 @@ def _set_env(tmp_path: Path, *, api_key: str, auth_enabled: bool, dev_events_ena
     os.environ["FG_SQLITE_PATH"] = str(tmp_path / "frostgate-test.db")
 
 
-def _call_build_app(build_app_fn: Callable[..., Any], *, test_mode: bool, auth_enabled: bool) -> Any:
+def _call_build_app(
+    build_app_fn: Callable[..., Any], *, test_mode: bool, auth_enabled: bool
+) -> Any:
     """
     Call api.main.build_app in a signature-tolerant way.
     We prefer explicit kwargs when available.
@@ -64,11 +68,19 @@ def build_app_factory(tmp_path: Path) -> Callable[..., Any]:
         api_key: str = DEFAULT_API_KEY,
         dev_events_enabled: bool = True,
     ):
-        _set_env(tmp_path, api_key=api_key, auth_enabled=auth_enabled, dev_events_enabled=dev_events_enabled)
+        _set_env(
+            tmp_path,
+            api_key=api_key,
+            auth_enabled=auth_enabled,
+            dev_events_enabled=dev_events_enabled,
+        )
 
         import api.main as main
+
         importlib.reload(main)
 
-        return _call_build_app(main.build_app, test_mode=True, auth_enabled=auth_enabled)
+        return _call_build_app(
+            main.build_app, test_mode=True, auth_enabled=auth_enabled
+        )
 
     return _build

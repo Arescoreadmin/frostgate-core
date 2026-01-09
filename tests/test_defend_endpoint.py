@@ -7,7 +7,6 @@ from api.main import app
 from api.auth_scopes import mint_key
 
 
-
 @pytest.fixture()
 def client():
     return TestClient(app)
@@ -28,7 +27,11 @@ def test_defend_high_bruteforce_response(client):
 
     resp = client.post(
         "/defend",
-        headers={"Content-Type": "application/json", "x-api-key": key, "x-pq-fallback": "1"},
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": key,
+            "x-pq-fallback": "1",
+        },
         json=_payload(12),
     )
 

@@ -1,6 +1,5 @@
-import os
 import importlib
-from pathlib import Path
+
 
 def test_paths_env_override(tmp_path, monkeypatch):
     st = tmp_path / "state"
@@ -12,6 +11,7 @@ def test_paths_env_override(tmp_path, monkeypatch):
     monkeypatch.setenv("FG_PYCACHE_DIR", str(pc))
 
     import api.config.paths as paths
+
     importlib.reload(paths)
 
     paths.ensure_runtime_dirs()
@@ -20,7 +20,9 @@ def test_paths_env_override(tmp_path, monkeypatch):
     assert q.exists() and q.is_dir()
     assert pc.exists() and pc.is_dir()
 
+
 def test_state_dir_default_is_not_app():
     # Default should be /var/lib/frostgate/state (or env override), never /app/state.
     import api.config.paths as paths
+
     assert "/app/state" not in str(paths.STATE_DIR)
