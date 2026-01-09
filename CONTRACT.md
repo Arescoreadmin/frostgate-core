@@ -3,25 +3,18 @@
 <!-- CONTRACT_LINT_ANCHORS
 0) Principles
 1) Configuration and Environment Precedence
-2) Database Path Contract (Anti-Drift)
-3) Auth, Scoped Keys, Rate Limiting
-4) `/defend` Endpoint Contract
-5) Telemetry Input Normalization
-6) Decision Engine MVP Rules
-7) Doctrine and ROE Persona Gate
-8) Clock Drift
-9) Persistence (Best Effort, Defined)
-10) Tamper-Evident Logging (Current State)
-11) `/feed/live` Contract
-12) Dev Seed Contract (`FG_DEV_EVENTS_ENABLED`)
-13) Non-Goals (Explicit)
-14) Change Control
-15) Mission Envelope
-16) Ring Routing
-17) ROE Engine
-18) Impact Estimate
-19) Forensic Snapshot + Replay
-20) Governance Approvals
+2) Auth, Scopes, Rate Limiting
+3) `/defend` Endpoint Contract
+4) Telemetry Input Normalization
+5) Decision Engine MVP Rules
+6) Doctrine and ROE Persona Gate
+7) Clock Drift
+8) Persistence (Best Effort, Defined)
+9) Tamper-Evident Logging (Current State)
+10) `/feed/live` Contract
+11) Dev Seed Contract (`FG_DEV_EVENTS_ENABLED`)
+12) Non-Goals (Explicit)
+13) Change Control
 
 build_app(auth_enabled
 FG_AUTH_ENABLED
@@ -86,7 +79,7 @@ If `X-Tenant-Id` is present, tenant validation is
 
 ---
 
-## 2) Database Path Contract (Anti-Drift)
+## 3) Database Path Contract (Anti-Drift)
 
 This contract exists to prevent environment drift
 (host `/var/lib/...` defaults leaking into dev/test),
@@ -117,7 +110,7 @@ run under the standard test entrypoint.
 
 ---
 
-## 3) Auth, Scoped Keys, Rate Limiting
+## 2) Auth, Scopes, Rate Limiting
 
 ### 3.1 API key behavior
 
@@ -157,7 +150,7 @@ bypassed (by definition).
 
 ---
 
-## 4) `/defend` Endpoint Contract
+## 3) `/defend` Endpoint Contract
 
 ### 4.1 Route
 
@@ -192,7 +185,7 @@ Also surfaced (may be null depending on config):
 
 ---
 
-## 5) Telemetry Input Normalization
+## 4) Telemetry Input Normalization
 
 ### 5.1 Event type resolution (canonical)
 
@@ -295,7 +288,7 @@ Baseline heuristic:
 
 ---
 
-## 8) Clock Drift
+## 7) Clock Drift
 
 ### 8.1 Drift metric
 
@@ -308,7 +301,7 @@ Else: `clock_drift_ms = abs(age_ms)`
 
 ---
 
-## 9) Persistence (Best Effort, Defined)
+## 8) Persistence (Best Effort, Defined)
 
 ### 9.1 DecisionRecord insert
 
@@ -342,7 +335,7 @@ not silently mint unusable keys.
 
 ---
 
-## 10) Tamper-Evident Logging (Current State)
+## 9) Tamper-Evident Logging (Current State)
 
 ### 10.1 Definition (MVP)
 
@@ -359,7 +352,7 @@ This does NOT guarantee tamper resistance against:
 
 ---
 
-## 11) `/feed/live` Contract
+## 10) `/feed/live` Contract
 
 ### 11.1 Schema invariants (UI contract)
 
@@ -431,7 +424,7 @@ This contract exists to prevent silent test passes caused
 
 ---
 
-## 13) Non-Goals (Explicit)
+## 12) Non-Goals (Explicit)
 
 MVP does NOT guarantee:
 - full EDR-grade rule coverage
@@ -441,7 +434,7 @@ MVP does NOT guarantee:
 
 ---
 
-## 14) Change Control
+## 13) Change Control
 
 Any change impacting:
 - `/defend` response schema
